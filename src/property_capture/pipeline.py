@@ -282,7 +282,6 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
     measurements, rooms_out = [], []
     base = {'unit': 'm', 'interval': None, 'uncertainty_status': 'uncalibrated',
             'calibration_status': 'no reference measurements (assumptions.md B-21)'}
-    min_cov = cfg['planes']['ceiling_min_coverage']
     for r in plan['rooms']:
         rid = r['room_id']
         snapped = r['outline_method'] == 'wall_snap'
@@ -305,17 +304,20 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                              'quality_flags': [] if r['visited'] else ['room_not_entered']})
 
         c = r['ceiling']
-        if c['height_m'] is not None and c['coverage'] >= min_cov:
+        if c['status'] == 'measured':
             ceiling = {'status': 'measured', 'measurement_id': f'M-{rid}-ceiling-height'}
-            measurements.append({'id': f'M-{rid}-ceiling-height', 'quantity': 'ceiling_height', 'value': c['height_m'],
-                                 **base, 'method': 'median height above floor plane of ceiling-plane inliers in the room',
-                                 'evidence_ids': ['ceiling-plane', rid], 'quality_flags': [],
-                                 'ceiling_coverage': c['coverage'], 'ceiling_inliers': c['inliers']})
+            measurements.append({
+                'id': f'M-{rid}-ceiling-height', 'quantity': 'ceiling_height', 'value': c['height_m'], **base,
+                'method': 'median of per-cell ceiling levels minus median of per-cell floor levels in the room',
+                'evidence_ids': ['ceiling-plane', rid], 'quality_flags': [],
+                'standard_error_m': c['standard_error_m'],
+                'standard_error_note': 'precision indicator from cell-level spread; not a calibrated interval',
+                'ceiling_cells': c['ceiling_cells'], 'flatness_iqr_m': c['flatness_iqr_m'],
+                'floor_source': c['floor_source'], 'ceiling_coverage': c['coverage']})
         else:
-            reason = ('no ceiling plane detected' if plan['ceiling'] is None
-                      else f"ceiling observed over {c['coverage']:.0%} of room < {min_cov:.0%}")
-            ceiling = {'status': 'not_measurable', 'reason': reason}
-            unobservable.append({'quantity': 'ceiling_height', 'room_id': rid, 'reason': reason})
+            ceiling = {'status': 'not_measurable', 'reason': c['reason'],
+                       'candidate_height_m': c.get('candidate_height_m')}
+            unobservable.append({'quantity': 'ceiling_height', 'room_id': rid, 'reason': c['reason']})
         unobservable.append({'quantity': 'damage', 'room_id': rid, 'reason': 'damage detection not implemented'})
         rooms_out.append({
             'room_id': rid, 'polygon': r['polygon'], 'floor_elevation_m': 0.0,

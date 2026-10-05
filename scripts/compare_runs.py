@@ -52,6 +52,12 @@ def summarize(run_dir):
             f"{c['opening_width_m']:.2f}" if c['opening_width_m'] is not None else '?'
             for c in m.get('connections') or [] if c['type'] == 'opening') or None,
         'shared walls': sum(c['type'] == 'shared_wall' for c in m.get('connections') or []) if m.get('rooms') else None,
+        'ceiling per room (candidate m: status)': '; '.join(
+            f"{r['ceiling']['candidate_height_m']:.3f}: " + (
+                f"measured, SE {100 * r['ceiling']['standard_error_m']:.2f} cm"
+                if r['ceiling']['status'] == 'measured' else r['ceiling']['reason'])
+            if r['ceiling'].get('candidate_height_m') is not None else (r['ceiling'].get('reason') or '—')
+            for r in m.get('rooms') or []) or None,
         'room overlap before / after clipping (m2)':
             f"{_fmt(_get(m, 'segmentation.overlap_before_m2'))} / {_fmt(_get(m, 'segmentation.overlap_after_m2'))}",
         'outline area not in any room (m2)': _get(m, 'segmentation.outline_area_not_in_rooms_m2'),
