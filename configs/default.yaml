@@ -122,6 +122,13 @@ floorplan:
   min_observed_fraction: 0.5
   open_min_area_kept: 0.95    # sliver removal is rejected if the room region would lose more than 5% of its area
   polygon_method: wall_snap   # wall_snap | occupancy (Phase 0 baseline)
+  shared_walls:               # rooms/shared_walls.py: pair the two faces of walls between rooms
+    max_angle_deg: 5.0
+    min_thickness_m: 0.03     # thinner gaps are outline noise, not a wall
+    max_thickness_m: 0.40     # partition walls through thick masonry
+    min_overlap_m: 0.30
+    group_tolerance_m: 0.05   # face pairs further than this from their wall's thickness are outline jogs
+    max_thickness_variation_m: 0.04  # thickness is measured only if the faces stay parallel within this
   ceiling:                    # rooms/ceiling.py: when a room's ceiling height is measurable
     cell_m: 0.25              # one level per cell; cells, not points, count as independent evidence
     min_cells: 8              # >= 0.5 m2 of ceiling seen in the room

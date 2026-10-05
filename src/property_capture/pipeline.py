@@ -378,6 +378,24 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                                  'method': 'extent of contact between room regions through free space',
                                  'evidence_ids': [cid], 'quality_flags': ['inferred_from_segmentation']})
         connections_out.append(entry)
+    shared_out = []
+    for sw in plan['shared_walls']:
+        faces = [[f'{rid}-wall-{e:02d}' for rid, e in zip(sw['rooms'], pair)] for pair in sw['faces']]
+        entry = {**{k: sw[k] for k in ('shared_wall_id', 'rooms', 'overlap_m', 'angle_deg', 'centrelines',
+                                       'thickness_status', 'excluded_outline_jogs', 'evidence')},
+                 'face_pairs': faces}
+        if sw['thickness_m'] is not None:
+            mid = f"M-{sw['shared_wall_id']}-thickness"
+            measurements.append({'id': mid, 'quantity': 'wall_thickness', 'value': sw['thickness_m'], **base,
+                                 'method': 'overlap-weighted median distance between paired facing edges of '
+                                           'neighbouring rooms',
+                                 'evidence_ids': [sw['shared_wall_id'], *[f for pair in faces for f in pair]],
+                                 'quality_flags': ['inferred_from_room_outlines'],
+                                 'thickness_variation_m': sw['thickness_variation_m'], 'overlap_m': sw['overlap_m']})
+            entry['thickness_measurement_id'] = mid
+        else:
+            entry['candidate_thickness_m'] = sw['candidate_thickness_m']
+        shared_out.append(entry)
     unobservable.append({'quantity': 'openings', 'room_id': None,
                          'reason': 'door/window classification and windows within a single room not implemented; '
                                    'room-to-room openings are listed under connections'})
@@ -398,7 +416,7 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                              'origin_world': plan['basis']['origin'], 'x_axis_world': plan['basis']['e1'],
                              'y_axis_world': plan['basis']['e2'], 'up_world': plan['basis']['up']},
         'rooms': rooms_out,
-        'connections': connections_out, 'measurements': measurements,
+        'connections': connections_out, 'shared_walls': shared_out, 'measurements': measurements,
         'warnings': warnings, 'unobservable': unobservable,
         'evaluation': [{'status': 'not_evaluable', 'reason': 'no reference measurements'}],
     }
@@ -440,6 +458,17 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                                     if k not in ('gap_candidates', 'corner_fills')}}
                   for r in plan['rooms']],
         'connections': plan['connections'],
+        'shared_walls': {
+            'count': len(plan['shared_walls']),
+            'thickness_m': [round(s['thickness_m'], 4) if s['thickness_m'] is not None else None
+                            for s in plan['shared_walls']],
+            'candidate_thickness_m': [round(s['candidate_thickness_m'], 4) for s in plan['shared_walls']],
+            'thickness_status': [s['thickness_status'] for s in plan['shared_walls']],
+            'overlap_m': [round(s['overlap_m'], 3) for s in plan['shared_walls']],
+            'excluded_outline_jogs': sum(len(s['excluded_outline_jogs']) for s in plan['shared_walls']),
+            'gap_area_m2': float(sum(s['gap_area_m2'] for s in plan['shared_walls'])),
+            'room_pairs': sorted({tuple(s['rooms']) for s in plan['shared_walls']}),
+        },
         'walls': [{'room_id': r['room_id'],
                    **{k: w[k] for k in ('length_m', 'support_points', 'observed_fraction', 'planarity_rms_m', 'evidence')}}
                   for r in plan['rooms'] for w in r['walls']],

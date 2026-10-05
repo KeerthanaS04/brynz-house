@@ -12,6 +12,7 @@ import numpy as np
 from ..geometry.planes import find_horizontal_plane
 from .ceiling import assess_ceiling, level_stats
 from .segmentation import overlap_area, resolve_overlaps, segment_rooms, to_m
+from .shared_walls import pair_shared_walls
 from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, repair_polygon, snap_polygon,
                     tall_cells)
 
@@ -286,6 +287,7 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
                       'mask': rmask, 'ceiling': ceiling_for(rmask)})
     for i, r in enumerate(rooms):
         r['room_id'] = f'room-{i:02d}'
+    shared_walls = pair_shared_walls(rooms, fcfg['shared_walls']) if len(rooms) > 1 else []
     label_to_id = {r['label']: r['room_id'] for r in rooms}
     for c in connections:
         c['room_ids'] = [label_to_id.get(x) for x in c['rooms']]
@@ -302,6 +304,7 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         'room': room,
         'rooms': rooms,
         'connections': connections,
+        'shared_walls': shared_walls,
         'segmentation': segmentation,
         'wall_detection': wall_detection,
         'wall_band_points': int(band.sum()),
