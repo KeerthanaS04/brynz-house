@@ -5,7 +5,7 @@ import yaml
 
 from property_capture.rooms.floorplan import extract_room, polygon_area
 from property_capture.rooms.walls import (detect_wall_segments, group_collinear, is_simple_polygon,
-                                          snap_polygon, tall_cells)
+                                          repair_polygon, snap_polygon, tall_cells)
 
 with open(Path(__file__).resolve().parents[2] / 'configs' / 'default.yaml', encoding='utf-8') as f:
     CFG = yaml.safe_load(f)['floorplan']
@@ -85,6 +85,47 @@ def test_large_unexplained_region_is_not_filled():
     snapped, _ = _hidden_corner(1.2, 5)
     assert snapped['corner_fills'] == []
     assert polygon_area(snapped['polygon']) < 11.5
+
+
+def test_thin_strip_through_gap_is_removed():
+    rng = np.random.default_rng(6)
+    pts, floor = _room_cells(4.0, 3.0, rng, door=(1.0, 1.9))
+    strip = np.column_stack([rng.uniform(1.3, 1.4, 400), rng.uniform(-1.5, 0.0, 400)])
+    room = extract_room(np.vstack([pts, strip]), floor, CFG, wall_min_points=1,
+                        open_m=WCFG['min_feature_width_m'])
+    walls = group_collinear(detect_wall_segments(pts, WCFG, rng), WCFG)
+    snapped = snap_polygon(room['contour_m'], walls, WCFG)
+    assert snapped['simple'] and len(snapped['polygon']) == 4
+    assert abs(polygon_area(snapped['polygon']) - 12.0) < 0.15
+
+
+def test_sliver_removal_never_cuts_off_a_room():
+    rng = np.random.default_rng(7)
+    a = rng.uniform([0, 0], [2, 2], size=(20000, 2))
+    b = rng.uniform([3, 0], [5, 2], size=(20000, 2))
+    neck = np.column_stack([rng.uniform(2, 3, 2000), rng.uniform(0.95, 1.05, 2000)])
+    room = extract_room(np.empty((0, 2)), np.vstack([a, b, neck]), CFG, open_m=WCFG['min_feature_width_m'])
+    assert room['opening'].startswith('rejected')
+    assert room['area_m2'] > 7.5
+
+
+def test_repair_self_overlapping_polygon():
+    # rectangle (1..4, 0..3) whose closing edge cuts back across the bottom edge; the extra
+    # triangle (0,0)-(1,0)-(1,-0.5) touches the rectangle only at (1,0), so the repaired
+    # simple outline is the rectangle, within one raster cell
+    bad = np.array([[0, 0], [4, 0], [4, 3], [1, 3], [1, -0.5]], float)
+    assert not is_simple_polygon(bad)
+    fixed = repair_polygon(bad)
+    assert is_simple_polygon(fixed) and len(fixed) == 4
+    assert abs(polygon_area(fixed) - 9.0) < 0.1
+
+
+def test_repair_removes_overlapping_sliver_along_wall():
+    # outline runs along y=0, detours into a 1 cm-wide notch and doubles back over the wall
+    bad = np.array([[0, 0], [2.0, 0], [2.0, 0.5], [2.01, 0.5], [2.01, -0.005], [4, 0], [4, 3], [0, 3]], float)
+    fixed = repair_polygon(bad)
+    assert is_simple_polygon(fixed)
+    assert abs(polygon_area(fixed) - 12.0) < 0.12
 
 
 def test_is_simple_polygon():

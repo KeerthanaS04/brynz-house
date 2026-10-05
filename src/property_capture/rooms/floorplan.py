@@ -10,7 +10,8 @@ import cv2
 import numpy as np
 
 from ..geometry.planes import find_horizontal_plane
-from .walls import detect_wall_segments, group_collinear, snap_polygon, tall_cells
+from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, repair_polygon, snap_polygon,
+                    tall_cells)
 
 
 def horizontal_basis(up):
@@ -42,9 +43,10 @@ def _raster(p, lo, g, shape):
     return img
 
 
-def extract_room(wall2d, floor2d, cfg, wall_min_points=None):
+def extract_room(wall2d, floor2d, cfg, wall_min_points=None, open_m=None):
     """Occupancy contour of wall + floor points. wall_min_points overrides the config count
-    (1 for tall-cell centres, which are already one filtered point per cell)."""
+    (1 for tall-cell centres, which are already one filtered point per cell). open_m removes
+    protrusions narrower than open_m (strips seen through gaps) before tracing the contour."""
     g = cfg['grid_m']
     wall_min = cfg['wall_min_points'] if wall_min_points is None else wall_min_points
     allp = np.vstack([wall2d, floor2d])
@@ -58,10 +60,25 @@ def extract_room(wall2d, floor2d, cfg, wall_min_points=None):
     k = max(1, int(round(cfg['close_m'] / g)))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))
     occ = cv2.morphologyEx(occ, cv2.MORPH_CLOSE, kernel)
-    contours, _ = cv2.findContours(occ, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    if not contours:
+
+    def largest(img):
+        cs, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        return max(cs, key=cv2.contourArea) if cs else None
+
+    c = largest(occ)
+    if c is None:
         return None
-    c = max(contours, key=cv2.contourArea)
+    opening = 'not_requested'
+    if open_m:
+        # Opening removes slivers; it is rejected when it would cut off real area
+        # (the largest region must keep >= open_min_area_kept of its area).
+        r = max(1, int(round(open_m / (2 * g))))
+        opened = cv2.morphologyEx(occ, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+        c_open = largest(opened)
+        if c_open is not None and cv2.contourArea(c_open) >= cfg['open_min_area_kept'] * cv2.contourArea(c):
+            c, opening = c_open, 'applied'
+        else:
+            opening = 'rejected: would cut off area'
     mask = np.zeros(shape, np.uint8)
     cv2.drawContours(mask, [c], -1, 255, -1)
     approx = cv2.approxPolyDP(c, cfg['simplify_m'] / g, True)[:, 0, :].astype(float)
@@ -71,6 +88,7 @@ def extract_room(wall2d, floor2d, cfg, wall_min_points=None):
     return {
         **describe_polygon(poly, wall2d, cfg),
         'contour_m': (c[:, 0, :].astype(float) + 0.5) * g + lo,
+        'opening': opening,
         'grid': {'origin': lo, 'cell_m': g, 'shape': shape},
         'mask': mask, 'wall_counts': W, 'floor_counts': F,
     }
@@ -125,22 +143,39 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
     floor_pts = np.abs(h) < fcfg['floor_inlier_m']
     band2d = to2d(points[band])
     method = fcfg['polygon_method']
-    wall_detection = {'polygon_method': method}
+    wcfg = fcfg['walls']
+    # Tall cells are the wall evidence for every method, so edge support is comparable.
+    tall2d, tall_stats = tall_cells(band2d, h[band], fcfg['wall_band_above_floor_m'], top, wcfg)
+    wall_detection = {'polygon_method': method, **tall_stats}
 
     if method == 'occupancy':
         room = extract_room(band2d, to2d(points[floor_pts]), fcfg)
+        if room is not None:
+            room.update(describe_polygon(room['polygon'], tall2d, fcfg))
     elif method == 'wall_snap':
-        wcfg = fcfg['walls']
-        tall2d, tall_stats = tall_cells(band2d, h[band], fcfg['wall_band_above_floor_m'], top, wcfg)
-        wall_detection.update(tall_stats)
         # Interior extent comes from everything observed (walls, furniture, floor) plus the
         # camera path, which is always inside the room; tall cells only define the walls.
         interior = np.vstack([to2d(points[floor_pts]), to2d(camera_positions)])
-        room = extract_room(band2d, interior, fcfg)
+        room = extract_room(band2d, interior, fcfg, open_m=wcfg['min_feature_width_m'])
         if room is not None:
             segments = detect_wall_segments(tall2d, wcfg, rng)
             walls = group_collinear(segments, wcfg)
-            snapped = snap_polygon(room['contour_m'], walls, wcfg)
+            # An invalid outline (coarse simplification crossing a nearby edge, or both sides of
+            # a thin notch snapped onto one wall) is first repaired by re-tracing its outer
+            # boundary, then retried with finer simplification, before falling back.
+            eps = wcfg['free_simplify_m']
+            for _ in range(3):
+                snapped = snap_polygon(room['contour_m'], walls, {**wcfg, 'free_simplify_m': eps})
+                if snapped is not None and not snapped['simple']:
+                    fixed = repair_polygon(snapped['polygon'])
+                    if fixed is not None and len(fixed) >= 3 and is_simple_polygon(fixed):
+                        snapped = {**snapped, 'polygon': fixed, 'simple': True}
+                        wall_detection['repaired'] = True
+                if snapped is not None and snapped['simple']:
+                    break
+                eps /= 2
+            wall_detection['free_simplify_used_m'] = eps
+            wall_detection['sliver_opening'] = room['opening']
             wall_detection.update({
                 'segments': len(segments), 'wall_lines': len(walls),
                 'wall_lines_geometry': [{'start': (w['centre'] + w['extent'][0] * w['direction']).tolist(),

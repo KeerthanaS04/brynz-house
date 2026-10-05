@@ -39,8 +39,12 @@ def summarize(run_dir):
         'perimeter (m)': _get(m, 'room.perimeter_m'),
         'wall lines detected': _get(m, 'wall_detection.wall_lines'),
         'contour explained by walls': _get(m, 'wall_detection.contour_explained_fraction'),
+        'sliver removal': _get(m, 'wall_detection.sliver_opening'),
+        'outline repaired': _get(m, 'wall_detection.repaired'),
         'gap candidates': len(_get(m, 'wall_detection.gap_candidates') or []),
         'corner fills': len(_get(m, 'wall_detection.corner_fills') or []),
+        'half-split methods (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.polygon_method'))} / "
+                                          f"{_fmt(_get(hs, 'second_half.polygon_method'))}",
         'half-split edges (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.walls'))} / {_fmt(_get(hs, 'second_half.walls'))}",
         'half-split area diff (m2)': _get(hs, 'differences.area_m2_abs_diff'),
         'half-split perimeter diff (m)': _get(hs, 'differences.perimeter_m_abs_diff'),

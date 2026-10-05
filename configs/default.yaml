@@ -47,6 +47,7 @@ floorplan:
   wall_support_m: 0.05
   observed_bin_m: 0.05
   min_observed_fraction: 0.5
+  open_min_area_kept: 0.95    # sliver removal is rejected if the room region would lose more than 5% of its area
   polygon_method: wall_snap   # wall_snap | occupancy (Phase 0 baseline)
   walls:
     cell_m: 0.04
@@ -67,7 +68,8 @@ floorplan:
     min_run_m: 0.25
     adjacent_merge_angle_deg: 5.0   # neighbouring runs on near-parallel lines this close are one wall
     adjacent_merge_offset_m: 0.10
-    free_simplify_m: 0.05
+    free_simplify_m: 0.15           # outline stretches no wall explains are inferred; finer detail is false precision
+    min_feature_width_m: 0.15       # outline protrusions narrower than this are sensing artifacts (strips seen through gaps)
     corner_min_angle_deg: 20.0
     corner_fill_radius_m: 0.6       # unexplained contour within this distance of a wall intersection is a hidden corner
     max_corner_shift_m: 0.5

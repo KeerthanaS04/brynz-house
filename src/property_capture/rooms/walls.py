@@ -149,6 +149,24 @@ def is_simple_polygon(poly):
     return True
 
 
+def repair_polygon(poly, cell_m=0.01):
+    """Outer boundary of a self-overlapping polygon: fill it on a fine raster, drop slivers a
+    few cells wide (overlapping edges), trace the external contour and simplify at one cell.
+    Edges stay within ~cell_m of the input except at removed slivers."""
+    lo = poly.min(axis=0) - 5 * cell_m
+    px = np.rint((poly - lo) / cell_m).astype(np.int32)
+    img = np.zeros((px[:, 1].max() + 6, px[:, 0].max() + 6), np.uint8)
+    cv2.fillPoly(img, [px.reshape(-1, 1, 2)], 255)
+    img = cv2.morphologyEx(img, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    cs, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cs:
+        return None
+    c = cv2.approxPolyDP(max(cs, key=cv2.contourArea), 1.0, True)[:, 0, :].astype(float)
+    out = c * cell_m + lo
+    area = 0.5 * float(np.dot(out[:, 0], np.roll(out[:, 1], -1)) - np.dot(out[:, 1], np.roll(out[:, 0], -1)))
+    return out[::-1] if area < 0 else out
+
+
 def _clean(poly, min_edge, collinear_m):
     pts = [p for p in poly]
     changed = True
