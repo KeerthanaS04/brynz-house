@@ -83,6 +83,13 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
         for i, line in enumerate(lines):
             _text(img, line, (c[0], c[1] + 18 * (i - (len(lines) - 1) / 2)), 0.5, colour, 1)
 
+    for o in plan.get('openings') or []:
+        a, b = np.rint(to_px(np.array([o['start'], o['end']]))).astype(int)
+        colour = {'door': (0, 0, 200), 'window': (200, 120, 0), 'passage': (140, 0, 140)}.get(o['type'], (0, 140, 0))
+        cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), colour, 5, cv2.LINE_AA)
+        tag = {'door': 'D', 'window': 'W', 'passage': 'P'}.get(o['type'], 'O')
+        _text(img, f"{tag} {o['width_m']:.2f}", to_px(o['centre'])[0] + np.array([0, 14]), 0.42, colour)
+
     for sw in plan.get('shared_walls') or []:
         for cl in sw['centrelines']:
             a, b = np.rint(to_px(np.array(cl))).astype(int)
@@ -106,6 +113,7 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
     x0, y0 = 12, h - 40
     cv2.line(img, (x0, y0), (x0 + px_per_m, y0), (0, 0, 0), 2)
     cv2.putText(img, '1 m', (x0 + px_per_m + 6, y0 + 5), FONT, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
-    cv2.putText(img, '* inferred wall. Red circle: opening between rooms (width). Grey x: shared wall. '
-                     'Blue: camera path. All values UNCALIBRATED.', (12, h - 14), FONT, 0.42, (60, 60, 60), 1, cv2.LINE_AA)
+    cv2.putText(img, '* inferred wall. Thick bars: D door / W window / O other opening (width). Red circle: '
+                     'room connection. Blue: camera path. All values UNCALIBRATED.', (12, h - 14), FONT, 0.42,
+                (60, 60, 60), 1, cv2.LINE_AA)
     cv2.imwrite(str(path), img)

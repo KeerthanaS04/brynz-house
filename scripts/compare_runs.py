@@ -71,6 +71,15 @@ def summarize(run_dir):
         'shared-wall gap area (m2) / outline jogs excluded': (
             f"{_fmt(_get(m, 'shared_walls.gap_area_m2'))} / {_get(m, 'shared_walls.excluded_outline_jogs')}"
             if _get(m, 'shared_walls') else None),
+        'openings in walls (type width m)': ', '.join(
+            f"{o['type'][0].upper()} {o['width_m']:.2f}" + ('*' if o['same_as'] else '')
+            for o in _get(m, 'openings.found') or []) or None,
+        'openings: physical / unbounded gaps excluded / confirmed by room connection': (
+            f"{_get(m, 'openings.physical_openings')} / {len(_get(m, 'openings.unbounded_gaps_excluded') or [])} / "
+            f"{sum(o['matches_connection'] for o in _get(m, 'openings.found') or [])}"
+            if _get(m, 'openings.enabled') else None),
+        'openings seen from both sides: width difference (cm)': ', '.join(
+            f"{100 * b['difference_m']:.0f}" for b in _get(m, 'openings.seen_from_both_sides') or []) or None,
         'room overlap before / after clipping (m2)':
             f"{_fmt(_get(m, 'segmentation.overlap_before_m2'))} / {_fmt(_get(m, 'segmentation.overlap_after_m2'))}",
         'outline area not in any room (m2)': _get(m, 'segmentation.outline_area_not_in_rooms_m2'),
