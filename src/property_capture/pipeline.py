@@ -20,6 +20,8 @@ from .evaluation.gates import gate_results
 from .ingestion.rgbd import load_capture
 from .reconstruction.fusion import fuse
 from .registration.conventions import resolve_conventions
+from .registration.drift import correct_drift, revisit_consistency, revisit_pairs
+from .registration.pose_graph import correct_drift_pose_graph
 from .reporting import provenance
 from .reporting.render import render_floorplan
 from .rooms.floorplan import build_floorplan
@@ -65,11 +67,22 @@ def _plan_summary(plan):
             'openings': sum(c['type'] == 'opening' for c in plan['connections'])}
 
 
-def _floorplan_with_sign_check(points, up, cap, cfg, rng):
+def _write_trajectories(path, cap, T_raw, T_corr):
+    with open(path, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['frame', 'timestamp', 'raw_x', 'raw_y', 'raw_z', 'corrected_x', 'corrected_y', 'corrected_z',
+                    'correction_m'])
+        for i in range(len(cap)):
+            a, b = T_raw[i, :3, 3], T_corr[i, :3, 3]
+            w.writerow([int(cap.frames[i]), f'{cap.timestamps[i]:.6f}', *[f'{v:.5f}' for v in a],
+                        *[f'{v:.5f}' for v in b], f'{np.linalg.norm(b - a):.5f}'])
+
+
+def _floorplan_with_sign_check(points, up, camera_positions, cfg, rng):
     """Build the plan with the gravity-derived up; flip once if no plausible floor is found."""
     lo, hi = cfg['checks']['camera_height_range_m']
     for sign, label in ((1, 'as_estimated'), (-1, 'flipped')):
-        plan = build_floorplan(points, sign * up, cap.positions, cfg['planes'], cfg['floorplan'], rng)
+        plan = build_floorplan(points, sign * up, camera_positions, cfg['planes'], cfg['floorplan'], rng)
         if plan['status'] == 'ok' and lo <= plan['camera_height_above_floor_m']['median'] <= hi:
             return plan, label
     return plan, 'unresolved'
@@ -117,7 +130,6 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
     stage('load_and_hash', t0)
 
     warnings, unobservable = [], []
-    warnings.append({'code': 'POSES_USED_AS_IS', 'message': 'device odometry used without drift correction (baseline)'})
     warnings.append({'code': 'DEPTH_UNIT_ASSUMED', 'message': f"depth unit {cfg['depth']['unit_scale_m']} m/count (assumptions.md B-03)"})
 
     t0 = time.time()
@@ -142,16 +154,85 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
     up = np.array(grav['up_world'])
     stage('gravity', t0)
 
+    axes = conv['selected']['camera_axes']
+    T_raw = T
+    dcfg_drift = cfg['drift']
+    drift = {'enabled': bool(dcfg_drift['enabled'])}
+    T_corr = None
+    if drift['enabled']:
+        t0 = time.time()
+        if dcfg_drift['method'] == 'pose_graph':
+            T_corr, drift_summary, drift_report = correct_drift_pose_graph(cap, T_raw, axes, up, dcfg_drift,
+                                                                           cfg['depth'])
+            held_out = drift_report['keyframes']
+        elif dcfg_drift['method'] == 'keyframe_to_map':
+            T_corr, drift_summary, drift_report = correct_drift(cap, T_raw, axes, up, dcfg_drift, cfg['depth'])
+            held_out = [e['frame'] for e in drift_report]
+        else:
+            raise ValueError(f"unknown drift.method {dcfg_drift['method']!r}")
+        _dump(out / 'intermediates' / 'drift_report.json', drift_report)
+        np.savez_compressed(out / 'intermediates' / 'trajectories.npz', raw=T_raw, corrected=T_corr,
+                            timestamps=cap.timestamps, frames=cap.frames)
+        _write_trajectories(out / 'intermediates' / 'trajectories.csv', cap, T_raw, T_corr)
+        # validation pairs never use keyframes, so they are held out from the loop constraints
+        pairs = revisit_pairs(cap, T_raw, axes, dcfg_drift, cfg['depth'], exclude=held_out)
+        revisit = revisit_consistency(cap, {'raw': T_raw, 'corrected': T_corr}, pairs, axes, dcfg_drift,
+                                      cfg['depth'])
+        drift.update({'summary': drift_summary,
+                      'revisit_consistency': {
+                          'method': 'depth reprojection residual between frames >= '
+                                    f"{dcfg_drift['revisit_min_gap_s']:.0f} s apart that see the same surfaces "
+                                    f"(>= {dcfg_drift['revisit_min_overlap']:.0%} view overlap under raw poses, "
+                                    'which favours raw)',
+                          'pairs': len(pairs), **revisit}})
+        log.info('drift (%s): %d keyframes, %d loop/keyframe constraints used, %d rejected, jumps at %s, '
+                 'max correction %.3f m / %.2f deg', dcfg_drift['method'],
+                 drift_summary['keyframes'], drift_summary['accepted'], drift_summary['rejected'],
+                 drift_summary['jumps_detected_at_frames'], drift_summary['max_correction_translation_m'],
+                 drift_summary['max_correction_yaw_deg'])
+
+        # Validate before applying: corrected poses are used only if they make revisits agree
+        # better on both measures; otherwise the device poses are kept and the reason recorded.
+        raw_r, cor_r = revisit.get('raw'), revisit.get('corrected')
+        n_inf = revisit['informative_pairs']
+        evidence = n_inf >= dcfg_drift['validation_min_pairs'] and raw_r and cor_r
+        if evidence:
+            log.info('revisit residual over %d informative pairs (%d dropped): raw %.4f m (%.0f%% within 5 cm), '
+                     'corrected %.4f m (%.0f%%)', n_inf, revisit['pairs_dropped_uninformative'],
+                     raw_r['median_abs_residual_m'], 100 * raw_r['mean_within_5cm'],
+                     cor_r['median_abs_residual_m'], 100 * cor_r['mean_within_5cm'])
+            better = (cor_r['median_abs_residual_m'] < raw_r['median_abs_residual_m'] and
+                      cor_r['mean_within_5cm'] >= raw_r['mean_within_5cm'])
+            decision = ('applied: corrected poses agree better at revisits' if better else
+                        'rejected: corrected poses agree worse at revisits than device poses')
+        else:
+            better = False
+            decision = (f"rejected: too few informative revisit pairs to validate ({n_inf} of {len(pairs)} < "
+                        f"{dcfg_drift['validation_min_pairs']})")
+        drift.update({'applied': better, 'decision': decision})
+        log.info('drift correction %s', decision)
+        if better:
+            T = T_corr
+            warnings.append({'code': 'DRIFT_CORRECTED', 'message': decision})
+        else:
+            warnings.append({'code': 'DRIFT_CORRECTION_REJECTED',
+                             'message': decision + '; device odometry kept (raw and corrected trajectories saved)'})
+        stage('drift_correction', t0)
+    else:
+        drift['applied'] = False
+        warnings.append({'code': 'POSES_USED_AS_IS', 'message': 'device odometry used without drift correction'})
+    cam_pos = T[:, :3, 3]
+
     t0 = time.time()
     fcfg = cfg['fusion']
     frame_ids = list(range(0, len(cap), fcfg['frame_stride']))
-    fused = fuse(cap, T, conv['selected']['camera_axes'], frame_ids, cfg['depth'], fcfg)
+    fused = fuse(cap, T, axes, frame_ids, cfg['depth'], fcfg)
     np.savez_compressed(out / 'intermediates' / 'fused_points.npz', points=fused['points'], counts=fused['counts'])
     log.info('fused %d voxels from %d frames', len(fused['points']), len(frame_ids))
     stage('fusion', t0)
 
     t0 = time.time()
-    plan, sign = _floorplan_with_sign_check(fused['points'], up, cap, cfg, rng)
+    plan, sign = _floorplan_with_sign_check(fused['points'], up, cam_pos, cfg, rng)
     if plan['status'] != 'ok':
         raise RuntimeError(f"floor plan failed: {plan.get('reason')}")
     if sign != 'as_estimated':
@@ -161,14 +242,31 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         warnings.append({'code': 'WALL_SNAP_FALLBACK', 'message': wd['fallback_reason']})
     stage('floorplan', t0)
 
+    if drift['enabled'] and dcfg_drift['ablation']:
+        # PDF drift gate: the stitched footprint with correction on and off. The main plan uses
+        # whichever trajectory was kept; the other one is built here.
+        t0 = time.time()
+        other_name, T_other = ('raw', T_raw) if drift['applied'] else ('corrected', T_corr)
+        f_o = fuse(cap, T_other, axes, frame_ids, cfg['depth'], fcfg)
+        p_o = build_floorplan(f_o['points'], plan['basis']['up'], T_other[:, :3, 3], cfg['planes'],
+                              cfg['floorplan'], rng)
+        main_name = 'corrected' if drift['applied'] else 'raw'
+        drift['ablation'] = {main_name: _plan_summary(plan), other_name: _plan_summary(p_o),
+                             'fused_voxels': {main_name: int(len(fused['points'])), other_name: int(len(f_o['points']))}}
+        if p_o['status'] == 'ok':
+            label = 'raw device poses' if other_name == 'raw' else 'drift-corrected poses (rejected)'
+            render_floorplan(out / f'floorplan_{other_name}_poses.png', p_o,
+                             [f'{cap.capture_id}  ABLATION: {label}'])
+        stage('drift_ablation', t0)
+
     consistency = None
     if cfg['consistency']['split_halves']:
         t0 = time.time()
         half = len(frame_ids) // 2
         halves = {}
         for name, ids in (('first_half', frame_ids[:half]), ('second_half', frame_ids[half:])):
-            f_h = fuse(cap, T, conv['selected']['camera_axes'], ids, cfg['depth'], fcfg)
-            p_h = build_floorplan(f_h['points'], plan['basis']['up'], cap.positions, cfg['planes'], cfg['floorplan'], rng)
+            f_h = fuse(cap, T, axes, ids, cfg['depth'], fcfg)
+            p_h = build_floorplan(f_h['points'], plan['basis']['up'], cam_pos, cfg['planes'], cfg['floorplan'], rng)
             halves[name] = _plan_summary(p_h)
         a, b = halves['first_half'], halves['second_half']
         diffs = {}
@@ -278,7 +376,8 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
             w.writerow([m['id'], m['quantity'], f"{m['value']:.4f}", m['unit'], m['uncertainty_status'], '',
                         ';'.join(m['quality_flags']), '', ''])
 
-    gates = gate_results(gates_path, references_available=False, drift_correction=False)
+    gates = gate_results(gates_path, references_available=False, drift_correction=drift['applied'],
+                         drift_ablation='ablation' in drift, drift_note=drift.get('decision'))
     _dump(out / 'gate_results.json', gates)
 
     metrics = {
@@ -309,13 +408,15 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                    **{k: w[k] for k in ('length_m', 'support_points', 'observed_fraction', 'planarity_rms_m', 'evidence')}}
                   for r in plan['rooms'] for w in r['walls']],
         'half_split_consistency': consistency,
+        'drift': drift,
         'accuracy': 'not_evaluable: no reference measurements',
     }
     _dump(out / 'metrics.json', metrics)
     _dump(out / 'intermediates' / 'wall_lines.json', plan['wall_detection'].get('wall_lines_geometry', []))
 
     measured = sum(r['ceiling']['status'] == 'measured' for r in rooms_out)
-    title = [f'{cap.capture_id}  run {run_id}  (poses as-is)',
+    title = [f"{cap.capture_id}  run {run_id}  "
+             f"({'drift-corrected poses' if drift['applied'] else 'device poses'})",
              f"{len(rooms_out)} room(s), total floor area {total_area:.2f} m2, "
              f"{sum(c['type'] == 'opening' for c in connections_out)} opening(s); "
              f"ceiling height measured in {measured}/{len(rooms_out)} room(s)"]

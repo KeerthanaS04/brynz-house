@@ -17,6 +17,60 @@ gravity:
   imu_stride: 5
   max_spread_deg: 10.0
 
+drift:                         # registration/pose_graph.py (default) or registration/drift.py
+  enabled: true
+  method: pose_graph           # pose_graph | keyframe_to_map (superseded: lost to device poses, reports/drift)
+  # pose graph: odometry edge sigma = base + drift rate x distance between keyframes (B-22)
+  odom_sigma_base_m: 0.005
+  odom_sigma_base_deg: 0.1
+  loop_max_candidates: 200
+  loop_submap_keyframes: 2     # keyframes on each side of the earlier keyframe form its local map
+  loop_min_inlier_fraction: 0.5
+  loop_max_rms_m: 0.02
+  loop_sigma_m: 0.02
+  loop_sigma_deg: 0.5
+  loop_fb_max_deg: 0.5         # a->b and b->a registrations must undo each other within this
+  loop_fb_max_m: 0.03
+  loop_huber: 3.0              # robust weighting threshold (normalized residual)
+  loop_max_chi: 5.0            # loops still this inconsistent after solving are removed
+  graph_iterations: 10
+  ablation: true               # also build the plan from raw poses in the same run (PDF drift gate)
+  frame_stride: 3
+  jump_threshold_m: 0.10       # odometry step that counts as a tracking jump (assumptions.md B-19)
+  keyframe_translation_m: 0.30
+  keyframe_rotation_deg: 15.0
+  pixel_step: 4
+  confidence_min: 2            # registration uses high-confidence depth only
+  max_depth_m: 4.0
+  edge_depth_jump_m: 0.05      # no normals across depth discontinuities
+  max_incidence_deg: 75.0      # drop surfaces seen at grazing angles
+  max_points_per_keyframe: 3000
+  map_voxel_m: 0.05
+  icp_iterations: 15
+  icp_max_distance_m: 0.20     # correspondence gate, shrinks each iteration
+  icp_min_distance_m: 0.05
+  icp_huber_m: 0.02
+  icp_damping: 1.0
+  icp_min_inliers: 200
+  icp_min_inlier_fraction: 0.3
+  icp_min_eigen: 0.001         # smallest eigenvalue of the normalized normal matrix; lower = degenerate (corridor, single wall)
+  # Accepted correction change per keyframe <= base + rate x distance walked since the matched map
+  # region was first scanned (ASSUMPTION: odometry drift <= 2% of distance and 1 deg per metre).
+  drift_base_m: 0.02
+  drift_rate: 0.02
+  drift_base_deg: 0.5
+  drift_rate_deg_per_m: 1.0
+  jump_allowance: 1.5          # x the size of a tracking jump between the matched map and this keyframe
+  jump_allowance_deg: 5.0
+  revisit_min_gap_s: 10.0      # revisit pairs for drift evidence: frames far apart in time seeing the same surfaces
+  revisit_max_distance_m: 2.0  # loose candidate bounds; the overlap test decides
+  revisit_max_angle_deg: 60.0
+  revisit_min_overlap: 0.3     # fraction of one frame's depth landing in the other's view
+  revisit_informative_max_m: 0.25  # pairs disagreeing more than this under every trajectory are uninformative
+  revisit_max_candidates: 300
+  revisit_max_pairs: 40
+  validation_min_pairs: 10     # corrected poses are applied only if revisit pairs show they agree better
+
 fusion:
   frame_stride: 3
   pixel_step: 2

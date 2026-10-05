@@ -58,6 +58,36 @@ def summarize(run_dir):
         'ceiling heights (m, coverage)': ', '.join(
             f"{r['ceiling']['height_m']:.2f} ({r['ceiling']['coverage']:.0%})" for r in m.get('rooms') or []
             if r['ceiling'].get('height_m') is not None) or None,
+        'drift correction decision': _get(m, 'drift.decision'),
+        'fused voxels raw / corrected (fewer = sharper)': (
+            f"{_get(m, 'drift.ablation.fused_voxels.raw')} / {_get(m, 'drift.ablation.fused_voxels.corrected')}"
+            if _get(m, 'drift.ablation.fused_voxels') else None),
+        'loops candidates / used / removed after solve': (
+            f"{_get(m, 'drift.summary.loop_candidates')} / {_get(m, 'drift.summary.loops_used')} / "
+            f"{_get(m, 'drift.summary.loops_removed_after_solve')}"
+            if _get(m, 'drift.summary.loop_candidates') is not None else None),
+        'drift keyframes accepted / rejected': (f"{_get(m, 'drift.summary.accepted')} / "
+                                                f"{_get(m, 'drift.summary.rejected')}"
+                                                if _get(m, 'drift.summary') else None),
+        'tracking jumps at frames': _get(m, 'drift.summary.jumps_detected_at_frames'),
+        'max correction (m / deg)': (f"{_fmt(_get(m, 'drift.summary.max_correction_translation_m'))} / "
+                                     f"{_fmt(_get(m, 'drift.summary.max_correction_yaw_deg'))}"
+                                     if _get(m, 'drift.summary') else None),
+        'revisit residual raw / corrected (m), informative / all pairs': (
+            f"{_fmt(_get(m, 'drift.revisit_consistency.raw.median_abs_residual_m'))} / "
+            f"{_fmt(_get(m, 'drift.revisit_consistency.corrected.median_abs_residual_m'))}, "
+            f"{_get(m, 'drift.revisit_consistency.informative_pairs')} / "
+            f"{_get(m, 'drift.revisit_consistency.pairs')}" if _get(m, 'drift.revisit_consistency') else None),
+        'revisit within 5 cm raw / corrected': (
+            f"{_fmt(_get(m, 'drift.revisit_consistency.raw.mean_within_5cm'))} / "
+            f"{_fmt(_get(m, 'drift.revisit_consistency.corrected.mean_within_5cm'))}"
+            if _get(m, 'drift.revisit_consistency.raw') else None),
+        'ablation rooms total area raw / corrected (m2)': (
+            f"{_fmt(_get(m, 'drift.ablation.raw.rooms_total_area_m2'))} / "
+            f"{_fmt(_get(m, 'drift.ablation.corrected.rooms_total_area_m2'))}" if _get(m, 'drift.ablation') else None),
+        'ablation rooms raw / corrected': (
+            f"{_get(m, 'drift.ablation.raw.rooms')} / {_get(m, 'drift.ablation.corrected.rooms')}"
+            if _get(m, 'drift.ablation') else None),
         'half-split rooms (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.rooms'))} / {_fmt(_get(hs, 'second_half.rooms'))}",
         'half-split methods (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.polygon_method'))} / "
                                           f"{_fmt(_get(hs, 'second_half.polygon_method'))}",
