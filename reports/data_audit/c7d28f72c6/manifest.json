@@ -1,0 +1,507 @@
+{
+  "capture_id": "c7d28f72c6",
+  "source_zip": "single_scan_with_ceiling.zip",
+  "extracted_to": "data\\raw\\single_scan_with_ceiling\\c7d28f72c6",
+  "audit_time_utc": "2026-10-05T06:19:54.988400+00:00",
+  "provenance": {
+    "command": "C:\\Users\\KeerthanaS\\brynz-house\\.venv\\Scripts\\python.exe scripts/audit_datasets.py",
+    "python": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:09:58) [MSC v.1929 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26100-SP0",
+    "packages": {
+      "numpy": "2.5.3",
+      "pandas": "3.0.6",
+      "pillow": "12.3.0",
+      "opencv": "5.0.0"
+    },
+    "script_sha256": "8a58bd7615cee130da8b3dca4f49985761f3c4731c62c450db12547769ae0566",
+    "git_commit": "unavailable (not a git repository or git not installed)",
+    "random_seed": 0
+  },
+  "archive": {
+    "zip_sha256": "4bfbeb11ee21b114c46ad43cf0c9602d8ada827397f4e8b3c70dd827d0191379",
+    "zip_size_bytes": 508471907,
+    "member_count": 19494,
+    "crc_check": "PASS",
+    "extraction": "reused existing",
+    "extracted_sizes_match_archive": true
+  },
+  "inventory": {
+    "file_count": 19494,
+    "files_per_directory": {
+      ".": 4,
+      "confidence": 9745,
+      "depth": 9745
+    },
+    "top_level_files": {
+      "camera_matrix.csv": 64,
+      "imu.csv": 2973457,
+      "odometry.csv": 1498253,
+      "rgb.mp4": 252331542
+    },
+    "full_listing": "inventory.csv"
+  },
+  "depth": {
+    "sequence": {
+      "count": 9745,
+      "first_index": 0,
+      "last_index": 9744,
+      "missing_count": 0,
+      "missing_indices_first_50": [],
+      "duplicate_indices": [],
+      "non_numeric_names_first_20": []
+    },
+    "stats": {
+      "frames_decoded": 9745,
+      "corrupt_frames": [],
+      "shapes": {
+        "[192, 256]": 9745
+      },
+      "dtypes": {
+        "uint16": 9745
+      },
+      "pil_modes": {
+        "I;16": 9745
+      },
+      "min_over_all_frames": 48,
+      "max_over_all_frames": 12125,
+      "nonzero_value_percentiles_sampled": {
+        "p0.1": 207.0,
+        "p1": 446.0,
+        "p50": 1507.0,
+        "p99": 5223.0,
+        "p99.9": 6758.0
+      },
+      "pixels_equal_0": 0,
+      "pixels_equal_65535": 0,
+      "pixels_total": 478986240,
+      "frames_with_any_zero": 0,
+      "max_zero_fraction_in_a_frame": 0.0
+    }
+  },
+  "confidence": {
+    "sequence": {
+      "count": 9745,
+      "first_index": 0,
+      "last_index": 9744,
+      "missing_count": 0,
+      "missing_indices_first_50": [],
+      "duplicate_indices": [],
+      "non_numeric_names_first_20": []
+    },
+    "stats": {
+      "frames_decoded": 9745,
+      "corrupt_frames": [],
+      "shapes": {
+        "[192, 256]": 9745
+      },
+      "dtypes": {
+        "uint8": 9745
+      },
+      "unique_values_all_frames": [
+        0,
+        1,
+        2
+      ],
+      "value_fraction_all_frames": {
+        "0": 0.0425,
+        "1": 0.0516,
+        "2": 0.906
+      }
+    }
+  },
+  "rgb_video": {
+    "readable": true,
+    "container_frame_count": 9745,
+    "container_fps": 45.33964019851117,
+    "width": 1920,
+    "height": 1440,
+    "fourcc": "hevc",
+    "decoded_frame_count": 9744,
+    "decoded_matches_container_count": false,
+    "frame_pts_as_reported_by_opencv": {
+      "first": 0.0,
+      "last": 214.88333333333333,
+      "duration_s": 214.88333333333333,
+      "rate_hz_from_median_dt": 59.99999999999062,
+      "dt_median_s": 0.016666666666669272,
+      "dt_min_s": 0.01666666666665151,
+      "dt_max_s": 0.05,
+      "dt_std_s": 0.007799315872439652,
+      "non_increasing_steps": 0,
+      "gaps_over_1_5x_median": 3149
+    },
+    "sha256": "dad93c96d6255e7d9e344c772c1dad287198a0d1800dc64ee31ad8f91a54ae7c",
+    "ffprobe": "ffprobe not on PATH; container metadata from OpenCV only"
+  },
+  "camera_matrix": {
+    "shape": [
+      3,
+      3
+    ],
+    "has_header_row": false,
+    "matrix": [
+      [
+        1601.0514,
+        0.0,
+        955.82275
+      ],
+      [
+        0.0,
+        1601.0514,
+        717.7025
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "fx_equals_fy": true,
+    "skew": 0.0,
+    "bottom_row_is_0_0_1": true,
+    "principal_point_offset_from_image_centre_px": [
+      -4.177249999999958,
+      -2.2975000000000136
+    ],
+    "candidate_depth_intrinsics": {
+      "label": "ASSUMPTION",
+      "scale": 0.13333333333333333,
+      "fx": 213.47352,
+      "fy": 213.47352,
+      "cx": 127.00970000000001,
+      "cy": 95.26033333333334
+    }
+  },
+  "odometry": {
+    "rows": 9745,
+    "columns": [
+      "timestamp",
+      "frame",
+      "x",
+      "y",
+      "z",
+      "qx",
+      "qy",
+      "qz",
+      "qw",
+      "fx",
+      "fy",
+      "cx",
+      "cy",
+      "distortion_center_x",
+      "distortion_center_y"
+    ],
+    "empty_columns": [
+      "distortion_center_x",
+      "distortion_center_y"
+    ],
+    "nan_counts": {},
+    "timestamps": {
+      "first": 65764.237587125,
+      "last": 65979.16695725,
+      "duration_s": 214.92937012499897,
+      "rate_hz_from_median_dt": 59.99160116077229,
+      "dt_median_s": 0.016669000004185364,
+      "dt_min_s": 0.01666858300450258,
+      "dt_max_s": 0.05000754199863877,
+      "dt_std_s": 0.007800165726468361,
+      "non_increasing_steps": 0,
+      "gaps_over_1_5x_median": 3149
+    },
+    "frame_column": {
+      "first": 0,
+      "last": 9744,
+      "contiguous_increasing": true,
+      "equals_depth_indices": true,
+      "equals_confidence_indices": true
+    },
+    "per_frame_intrinsics": {
+      "fx": {
+        "min": 1581.1676,
+        "max": 1614.6085,
+        "unique": 65,
+        "camera_matrix_value": 1601.0514,
+        "max_abs_diff_vs_camera_matrix": 19.883800000000065
+      },
+      "fy": {
+        "min": 1581.1676,
+        "max": 1614.6085,
+        "unique": 65,
+        "camera_matrix_value": 1601.0514,
+        "max_abs_diff_vs_camera_matrix": 19.883800000000065
+      },
+      "cx": {
+        "min": 955.28064,
+        "max": 956.0423,
+        "unique": 3852,
+        "camera_matrix_value": 955.82275,
+        "max_abs_diff_vs_camera_matrix": 0.5421100000000934
+      },
+      "cy": {
+        "min": 717.41077,
+        "max": 717.96545,
+        "unique": 4398,
+        "camera_matrix_value": 717.7025,
+        "max_abs_diff_vs_camera_matrix": 0.2917300000000296
+      }
+    },
+    "translation": {
+      "range_per_axis": {
+        "x": [
+          -2.1872745,
+          6.1074667
+        ],
+        "y": [
+          -0.16524287,
+          0.25525266
+        ],
+        "z": [
+          -0.23898406,
+          8.89029
+        ]
+      },
+      "path_length": 99.76259757047013,
+      "max_step": 0.027989929067543762,
+      "median_step": 0.009114333620246844,
+      "jump_threshold": 0.1,
+      "jumps_to_frame_index": []
+    },
+    "quaternion": {
+      "norm_min": 0.9999998391858734,
+      "norm_max": 1.0000001708460307,
+      "all_unit_within_1e-3": true,
+      "max_rotation_step_deg": 4.137189042243867,
+      "median_angular_rate_deg_s": 25.672444515864832
+    }
+  },
+  "imu": {
+    "rows": 21339,
+    "columns": [
+      "timestamp",
+      "a_x",
+      "a_y",
+      "a_z",
+      "alpha_x",
+      "alpha_y",
+      "alpha_z"
+    ],
+    "nan_counts": {},
+    "timestamps": {
+      "first": 65764.320679875,
+      "last": 65979.199717125,
+      "duration_s": 214.87903724999342,
+      "rate_hz_from_median_dt": 99.30486589990328,
+      "dt_median_s": 0.010070000003906898,
+      "dt_min_s": 0.010066874994663522,
+      "dt_max_s": 0.01007200000458397,
+      "dt_std_s": 7.333213259106676e-07,
+      "non_increasing_steps": 0,
+      "gaps_over_1_5x_median": 0
+    },
+    "accel_magnitude": {
+      "median": 1.0025215430450305,
+      "p5": 0.9506624556435849,
+      "p95": 1.083331760389641
+    },
+    "accel_mean_per_axis": {
+      "a_x": -0.0091,
+      "a_y": -0.9239,
+      "a_z": -0.1074
+    },
+    "gyro_magnitude": {
+      "median": 0.4500069694450661,
+      "p95": 1.3235341251155532
+    }
+  },
+  "synchronization": {
+    "stream_counts": {
+      "depth": 9745,
+      "confidence": 9745,
+      "odometry_rows": 9745,
+      "video_decoded": 9744
+    },
+    "stream_counts_all_equal": false,
+    "odometry_vs_imu": {
+      "imu_start_minus_odometry_start_s": 0.08309275000647176,
+      "imu_end_minus_odometry_end_s": 0.03275987500092015,
+      "overlap_s": 214.8462773749925
+    },
+    "video_duration_minus_odometry_duration_s": -0.04603679166564234,
+    "video_to_odometry_alignment": {
+      "method": "compare video PTS gaps with odometry timestamp gaps, both quantized to the odometry median dt",
+      "video_frames": 9744,
+      "odometry_frames": 9745,
+      "candidates": [
+        {
+          "odometry_offset": 0,
+          "gap_pattern_mismatches": 6199,
+          "max_abs_time_residual_s": 0.033328208665867956
+        },
+        {
+          "odometry_offset": 1,
+          "gap_pattern_mismatches": 0,
+          "max_abs_time_residual_s": 0.029367708657332514
+        }
+      ],
+      "best_offset": 1,
+      "best_is_exact": true,
+      "best_is_unique": true,
+      "mapping": "video frame i = odometry/depth frame i + 1"
+    },
+    "imu_vs_odometry_lag": {
+      "method": "cross-correlation of |gyro| vs angular rate from consecutive odometry quaternions, 5 ms grid, +/-0.5 s search",
+      "imu_lag_s": 0.0,
+      "peak_normalized_correlation": 1.0,
+      "interpretation": "positive = a rotation event appears later on the IMU timestamps than on odometry; aligned_t_imu = t_imu - imu_lag_s",
+      "at_search_boundary": false
+    },
+    "gyro_to_odometry_rate_ratio_p90": 1.0107918100472546
+  },
+  "previews": {
+    "files": [
+      "rgb_contact_sheet.png",
+      "depth_contact_sheet.png",
+      "confidence_contact_sheet.png",
+      "trajectory.png"
+    ],
+    "sample_indices": [
+      0,
+      885,
+      1771,
+      2657,
+      3543,
+      4429,
+      5314,
+      6200,
+      7086,
+      7972,
+      8858,
+      9744
+    ],
+    "depth_colormap": "TURBO, fixed range 446..5223 raw units (p1..p99 of non-zero sample); black = 0",
+    "confidence_colors": "0 red, 1 yellow, 2 green, any other value magenta"
+  },
+  "observed": [
+    {
+      "label": "OBSERVED",
+      "text": "Archive CRC check: PASS over 19494 members; extracted sizes match archive: True"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "Stream counts: {'depth': 9745, 'confidence': 9745, 'odometry_rows': 9745, 'video_decoded': 9744}; all equal: False"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "depth filenames 0..9744: 0 missing, 0 duplicate"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "confidence filenames 0..9744: 0 missing, 0 duplicate"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "depth: 9745 decoded, 0 corrupt; dtypes {'uint16': 9745}, shapes {'[192, 256]': 9745}, raw range 48..12125, 0 zero pixels, 0 pixels at 65535"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "confidence: values [0, 1, 2] with fractions {0: 0.0425, 1: 0.0516, 2: 0.906}"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "video 1920x1440 hevc, container 45.340 fps, decoded 9744 frames (container says 9745)"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "odometry frame column contiguous: True; equals depth indices: True; equals confidence indices: True"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "odometry rate 59.99 Hz (median dt), 45.34 Hz average; 3149 gaps >1.5x median (largest 0.050 s), 0 non-increasing steps"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "IMU rate 99.30 Hz (median dt), 0 gaps >1.5x median"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "quaternion norms 1.000000..1.000000; max rotation step 4.14 deg; max translation step 0.0280"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "odometry columns present but empty in every row: ['distortion_center_x', 'distortion_center_y']"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "per-frame intrinsics unique values {'fx': 65, 'fy': 65, 'cx': 3852, 'cy': 4398}; max |diff| vs camera_matrix.csv {'fx': 19.884, 'fy': 19.884, 'cx': 0.542, 'cy': 0.292}"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "median |accel| = 1.003: consistent with units of g including gravity, not m/s^2"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "IMU-odometry lag estimate 0.0 s (peak correlation 1.0)"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "p90 |gyro| / p90 odometry angular rate (rad/s) = 1.011; ~1 supports rad/s, ~57 would indicate deg/s"
+    },
+    {
+      "label": "OBSERVED",
+      "text": "video frame i = odometry/depth frame i + 1: video PTS gap pattern matches odometry exactly (max time residual 29.37 ms; offset 0: 6199 mismatches). Video lacks the first 1 odometry frame(s); see video_frame_map.csv"
+    }
+  ],
+  "assumptions": [
+    {
+      "label": "ASSUMPTION",
+      "text": "quaternion component order is (qx, qy, qz, qw) as the column names suggest; not independently verified (rotation-angle checks above do not depend on it)"
+    },
+    {
+      "label": "ASSUMPTION",
+      "text": "candidate depth intrinsics = RGB camera_matrix scaled by depth/RGB width; valid only if depth is a resampled, aligned view of the RGB image"
+    }
+  ],
+  "unresolved": [
+    {
+      "label": "UNRESOLVED",
+      "text": "near-perfect gyro/odometry correlation suggests odometry orientation is fused from this IMU, so the lag estimate does not independently validate camera-IMU synchronization"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "depth units: raw values 48..12125 uint16; millimetres is plausible but needs a physical reference measurement"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "depth invalid sentinel: confirm whether 0 (or another value) marks invalid depth; no zero pixels observed"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "depth-to-RGB extrinsics and true depth intrinsics are not in the archive"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "pose direction (camera-to-world vs world-to-camera) and world axis convention"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "IMU axis orientation relative to the camera frame"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "timestamp epoch (values are not Unix time) and how video PTS maps onto it"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "lens distortion: no coefficients supplied"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "confidence value semantics (e.g. ARKit low/medium/high) are not documented in the archive"
+    },
+    {
+      "label": "UNRESOLVED",
+      "text": "capture device, app, OS and settings are not recorded in the archive"
+    }
+  ],
+  "status": "COMPLETE"
+}

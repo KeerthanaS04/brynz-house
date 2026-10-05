@@ -1,0 +1,54 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Raw captures and large binaries (never committed; see CLAUDE_updated.md rule 7)
+*.zip
+data/
+*.mp4
+*.mov
+*.ply
+*.pcd
+*.npy
+*.npz
+
+# Model weights (fetched by script, per PDF constraints)
+weights/
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.safetensors
+
+# Run-specific outputs (regenerable; reports/ is tracked as evidence)
+outputs/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Logs and scratch
+*.log
+*.tmp
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local settings
+.claude/settings.local.json

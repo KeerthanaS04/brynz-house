@@ -1,0 +1,164 @@
+# Acceptance gates / scorecard
+# SOLE threshold source — verify each value against the original case-study PDF
+# (Aug 2026 edition). Every value carries its score weight from the PDF.
+# STATUS column: PENDING (needs benchmark captures), CLOSED (implemented),
+#               BLOCKED (missing input).
+
+metadata:
+  source: "Applied AI Case Study PDF, Aug 2026"
+  gates_yaml_version: "0.1.0"
+  last_verified_pdf: "Applied_AI_Case_Study.pdf"
+  note: "Do not guess denominator, rounding, 'or' semantics, or tie definitions."
+
+score_weights:
+  walk_in_test: 0.30
+  fix_loop_delta: 0.25
+  benchmark_accuracy_all_tiers: 0.15
+  compliance_matrix_coverage: 0.10
+  head_to_head_vs_incumbent: 0.10
+  capture_route_quality: 0.05
+  process_evidence: 0.05
+
+gates:
+
+  # ---- Round 1 gates (the 'five additions') ----
+
+  gate_opening_width:
+    source: "PDF Part 2, Round 1 gates, row 'Opening widths'"
+    description: >
+      Opening localization within 2 cm on at least 85% of openings.
+      Detection itself scored: a missed opening and a phantom opening
+      each count as a miss.
+    threshold:
+      tolerance_cm: 2.0
+      coverage_pct: 0.85
+    scoring:
+      missed_counts_as_failure: true
+      phantom_counts_as_failure: true
+    status: PENDING
+
+  gate_ceiling_height:
+    source: "PDF Part 2, Round 1 gates, row 'Ceiling height'"
+    description: >
+      Ceiling height within 1.5 cm per room. Where a room is captured more
+      than once, spread across captures <= 1 cm.
+      Repeatable-but-biased and unrepeatable both fail; report must state
+      which.
+    threshold:
+      per_room_tolerance_cm: 1.5
+      repeat_spread_cm: 1.0
+      repeat_count_minimum: 2
+    semantics:
+      report_bias_or_variance: true
+    status: PENDING
+
+  gate_repeatability:
+    source: "PDF Part 2, Round 1 gates, row 'Repeatability'"
+    description: >
+      Two captures of the same room at the same tier agree within 1 cm
+      or 0.5% per wall. 'Same room in, same plan out' is the operational
+      meaning.
+    threshold:
+      absolute_cm: 1.0
+      relative_pct: 0.5
+    semantics:
+      or_condition: true      # pass if EITHER tolerance met (clarify in report)
+      requires_repeat_capture_same_room_same_tier: true
+    status: PENDING
+
+  gate_drift_accountability:
+    source: "PDF Part 2, Round 1 gates, row 'Drift accountability'"
+    description: >
+      Report what the pipeline does about accumulated drift on the
+      multi-room capture (loop closure, pose graph, plane-anchored
+      correction, anything) and an ablation showing the stitched footprint
+      with it on and off. 'Poses used as-is' is an automatic fail.
+    requirement:
+      corrected_trajectory_saved_separately_from_raw: true
+      ablation_on_off_reported: true
+      poses_used_as_is_automatic_fail: true
+    status: PENDING
+
+  gate_photo_tier_whole_property_stitch:
+    source: "PDF Part 2, Round 1 gates, row 'Photo-tier whole-property stitch'"
+    description: >
+      Per-room photo folders produce one stitched plan with correct
+      adjacency and no room overlaps; footprint within +/-8% with calibrated
+      intervals. A photo path that handles single rooms only fails.
+    threshold:
+      footprint_tolerance_pct: 8.0
+      photo_wall_length_tolerance_pct: 8.0
+      video_wall_length_tolerance_pct: 3.0
+    requirement:
+      correct_adjacency: true
+      no_room_overlaps: true
+      calibrated_intervals: true
+    status: PENDING
+
+  gate_calibration_scored_every_tier:
+    source: "PDF Part 2, row 'Photo-tier and video-tier gates are looser'"
+    description: >
+      Calibration is scored at every tier. Confident garbage on thin input
+      caps total score.
+    requirement:
+      every_measurement_has_calibrated_interval_or_uncalibrated_status: true
+    status: PENDING
+
+  # ---- Part 3 head-to-head ----
+
+  gate_head_to_head:
+    source: "PDF Part 3"
+    description: >
+      On two benchmark rooms, compare pipeline (LiDAR tier) vs one consumer
+      scanning app (free tier sufficient) on the same rooms/references.
+      Beat or tie on at least 70% of shared dimensions.
+    threshold:
+      beat_tie_pct: 0.70
+      required_app_version: "reported with app name/version/device/settings"
+    score_weight: 0.10
+    status: PENDING
+
+  # ---- Walk-in test ----
+
+  gate_walk_in_test:
+    source: "PDF Part 2 / Scoring 30%"
+    description: >
+      At defense, capture a never-before-seen space with their iPhone 15+,
+      tier chosen on the day, following your capture route exactly.
+      Pipeline runs cold in front of them; scored against in-room laser
+      measurements taken while it runs.
+    constraint:
+      must_run_cold_start: true
+      must_run_all_three_tiers: true
+      cached_outputs_replay_deterministically: true
+    score_weight: 0.30
+    status: PENDING
+
+  # ---- Fix loop ----
+
+  gate_fix_loop:
+    source: "PDF Part 4"
+    description: >
+      Acknowledge worst-performing gate, root-cause hypothesis + evidence,
+      intended fix + predicted number. Ship it. Final submission: before
+      run, after run, both regenerable by grader, readable diff.
+    scoring:
+      full_marks: "correct root cause + shipped fix + gate moves fail->pass"
+      majority: "correct root cause + shipped fix + meaningful movement + explanation"
+      post_mortem_only: "prediction badly wrong (honesty marks only)"
+      zero_no_fix: "analysis with no shipped fix"
+      zero_no_repro: "fix with no regenerable before/after"
+    score_weight: 0.25
+    status: PENDING
+
+  # ---- Process evidence ----
+
+  gate_process_evidence:
+    source: "PDF Part 5 + Scoring 5%"
+    description: >
+      Commit as you work; history must look genuine and owned.
+    constraint:
+      incremental_commits_required: true
+      ai_tool_use_allowed_and_expected: true
+    score_weight: 0.05
+    status: ACTIVE
