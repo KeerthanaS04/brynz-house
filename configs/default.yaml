@@ -1,0 +1,55 @@
+# Phase 0 RGB-D baseline configuration. Labels refer to docs/requirements/assumptions.md.
+seed: 0
+
+depth:
+  unit_scale_m: 0.001        # ASSUMPTION B-03 (mm); checked by pose_convention.depth_scale_grid
+  min_m: 0.2
+  max_m: 5.0
+  confidence_min: 1          # PROPOSED B-04: drop confidence 0 only
+
+pose_convention:
+  pair_gap_frames: 15        # ~0.25-0.33 s apart at 45-60 Hz
+  num_pairs: 24
+  pixel_step: 4
+  depth_scale_grid: [0.5, 0.8, 0.9, 0.95, 1.0, 1.05, 1.1, 1.25, 2.0]
+
+gravity:
+  imu_stride: 5
+  max_spread_deg: 10.0
+
+fusion:
+  frame_stride: 3
+  pixel_step: 2
+  voxel_size_m: 0.02
+  min_points_per_voxel: 2
+
+planes:
+  histogram_bin_m: 0.01
+  peak_window_m: 0.05
+  ransac_threshold_m: 0.015
+  ransac_iterations: 300
+  max_tilt_deg: 10.0
+  floor_min_fraction: 0.02
+  ceiling_min_fraction: 0.01
+  floor_below_camera_m: 0.3
+  ceiling_above_camera_m: 0.1
+  ceiling_min_coverage: 0.3
+
+floorplan:
+  grid_m: 0.02
+  floor_inlier_m: 0.03
+  wall_band_above_floor_m: 0.3
+  wall_band_below_ceiling_m: 0.3
+  wall_band_max_above_floor_m: 2.0
+  wall_min_points: 2
+  close_m: 0.10
+  simplify_m: 0.05
+  wall_support_m: 0.05
+  observed_bin_m: 0.05
+  min_observed_fraction: 0.5
+
+consistency:
+  split_halves: true
+
+checks:
+  camera_height_range_m: [0.3, 2.2]   # handheld capture: plausible camera height above floor
