@@ -108,7 +108,8 @@ never mark blocked work complete.
 
 Create `configs/evaluation/gates.yaml` as the sole threshold source.
 Candidate values from the project review, **verify against original
-PDF**: - opening localization within 2 cm on at least 85%; - ceiling
+PDF**: - opening width within 2 cm on at least 85% (missed and phantom
+openings each count as a miss); - ceiling
 height within 1.5 cm per room; - repeat spread below 1 cm; - wall
 repeatability ≤1 cm or 0.5% (clarify exact rule); - using supplied poses
 as-is = automatic fail; - beat/tie consumer app on ≥70% of dimensions

@@ -6,7 +6,7 @@
 
 metadata:
   source: "Applied AI Case Study PDF, Aug 2026"
-  gates_yaml_version: "0.1.0"
+  gates_yaml_version: "0.2.0"
   last_verified_pdf: "Applied_AI_Case_Study.pdf"
   note: "Do not guess denominator, rounding, 'or' semantics, or tie definitions."
 
@@ -21,14 +21,26 @@ score_weights:
 
 gates:
 
-  # ---- Round 1 gates (the 'five additions') ----
+  # ---- Round 1 gates ----
+  # PDF p.2: "Round 1 gates apply, with five additions". The Round 1 gate
+  # list itself is not in this PDF (assumptions.md A-02).
+
+  gate_round1_unspecified:
+    source: "PDF Part 2, 'Round 1 gates apply'"
+    description: >
+      Round 1 gates are referenced but not listed in the Aug 2026 PDF.
+      Thresholds unknown until obtained from the evaluator.
+    status: BLOCKED
+
+  # ---- The five additions to Round 1 ----
 
   gate_opening_width:
-    source: "PDF Part 2, Round 1 gates, row 'Opening widths'"
+    source: "PDF Part 2, gate table, row 'Opening widths'"
     description: >
-      Opening localization within 2 cm on at least 85% of openings.
+      Opening WIDTH error <= 2 cm on at least 85% of openings.
       Detection itself scored: a missed opening and a phantom opening
-      each count as a miss.
+      each count as a miss. Denominator (ground-truth openings plus
+      phantoms?) unconfirmed, see assumptions.md A-03.
     threshold:
       tolerance_cm: 2.0
       coverage_pct: 0.85
@@ -62,7 +74,7 @@ gates:
       absolute_cm: 1.0
       relative_pct: 0.5
     semantics:
-      or_condition: true      # pass if EITHER tolerance met (clarify in report)
+      or_condition: unresolved  # PDF says "1 cm or 0.5%"; report both per wall until clarified (assumptions.md A-04)
       requires_repeat_capture_same_room_same_tier: true
     status: PENDING
 
