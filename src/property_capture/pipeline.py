@@ -58,7 +58,11 @@ def _plan_summary(plan):
     return {'status': 'ok', 'polygon_method': plan['wall_detection']['polygon_method'],
             'area_m2': r['area_m2'], 'perimeter_m': r['perimeter_m'],
             'walls': len(r['walls']), 'ceiling_height_m': plan['ceiling_height_m'],
-            'ceiling_coverage': plan['ceiling_coverage']}
+            'ceiling_coverage': plan['ceiling_coverage'],
+            'rooms': len(plan['rooms']),
+            'room_areas_m2': sorted((round(x['area_m2'], 3) for x in plan['rooms']), reverse=True),
+            'rooms_total_area_m2': float(sum(x['area_m2'] for x in plan['rooms'])),
+            'openings': sum(c['type'] == 'opening' for c in plan['connections'])}
 
 
 def _floorplan_with_sign_check(points, up, cap, cfg, rng):
@@ -169,7 +173,7 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         a, b = halves['first_half'], halves['second_half']
         diffs = {}
         if a['status'] == b['status'] == 'ok':
-            for k in ('area_m2', 'perimeter_m', 'ceiling_height_m'):
+            for k in ('area_m2', 'perimeter_m', 'ceiling_height_m', 'rooms', 'rooms_total_area_m2'):
                 if a[k] is not None and b[k] is not None:
                     diffs[f'{k}_abs_diff'] = abs(a[k] - b[k])
         consistency = {'method': 'independent floor plans from first vs second half of frames (same poses, same up)',
@@ -177,39 +181,77 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                        **halves, 'differences': diffs}
         stage('half_split_consistency', t0)
 
-    room = plan['room']
-    measurements, walls_out = [], []
+    measurements, rooms_out = [], []
     base = {'unit': 'm', 'interval': None, 'uncertainty_status': 'uncalibrated',
             'calibration_status': 'no reference measurements (assumptions.md B-21)'}
-    for i, w in enumerate(room['walls']):
-        mid = f'M-wall-{i:02d}'
-        flags = [] if w['evidence'] == 'observed' else ['inferred_low_support']
-        measurements.append({'id': mid, 'quantity': 'wall_length', 'value': w['length_m'], **base,
-                             'method': ('edge of wall-snapped room polygon on floor plane'
-                                        if plan['wall_detection']['polygon_method'] == 'wall_snap'
-                                        else 'edge of simplified occupancy contour on floor plane'),
-                             'evidence_ids': [f'wall-{i:02d}'], 'quality_flags': flags,
-                             'support_points': w['support_points'], 'observed_fraction': w['observed_fraction'],
-                             'planarity_rms_m': w['planarity_rms_m']})
-        walls_out.append({'wall_id': f'wall-{i:02d}', 'start': w['start'], 'end': w['end'],
-                          'length_measurement_id': mid, 'evidence': w['evidence']})
-    measurements.append({'id': 'M-floor-area', 'quantity': 'floor_area', 'value': room['area_m2'], **base, 'unit': 'm2',
-                         'method': 'area of room polygon', 'evidence_ids': ['room-00'], 'quality_flags': []})
-
     min_cov = cfg['planes']['ceiling_min_coverage']
-    if plan['ceiling_height_m'] is not None and plan['ceiling_coverage'] >= min_cov:
-        ceiling = {'status': 'measured', 'measurement_id': 'M-ceiling-height'}
-        measurements.append({'id': 'M-ceiling-height', 'quantity': 'ceiling_height', 'value': plan['ceiling_height_m'],
-                             **base, 'method': 'median height of ceiling-plane inliers above floor plane',
-                             'evidence_ids': ['ceiling-plane'], 'quality_flags': [],
-                             'ceiling_coverage': plan['ceiling_coverage']})
-    else:
-        reason = ('no ceiling plane detected' if plan['ceiling_height_m'] is None
-                  else f"ceiling observed over {plan['ceiling_coverage']:.0%} of room < {min_cov:.0%}")
-        ceiling = {'status': 'not_measurable', 'reason': reason}
-        unobservable.append({'quantity': 'ceiling_height', 'room_id': 'room-00', 'reason': reason})
-    unobservable.append({'quantity': 'openings', 'room_id': 'room-00', 'reason': 'opening detection not in baseline'})
-    unobservable.append({'quantity': 'damage', 'room_id': 'room-00', 'reason': 'damage detection not in baseline'})
+    for r in plan['rooms']:
+        rid = r['room_id']
+        snapped = r['outline_method'] == 'wall_snap'
+        walls_out = []
+        for i, w in enumerate(r['walls']):
+            wid, mid = f'{rid}-wall-{i:02d}', f'M-{rid}-wall-{i:02d}'
+            flags = [] if w['evidence'] == 'observed' else ['inferred_low_support']
+            if not r['visited']:
+                flags.append('room_not_entered')
+            measurements.append({'id': mid, 'quantity': 'wall_length', 'value': w['length_m'], **base,
+                                 'method': ('edge of wall-snapped room polygon on floor plane' if snapped
+                                            else 'edge of simplified occupancy contour on floor plane'),
+                                 'evidence_ids': [wid], 'quality_flags': flags,
+                                 'support_points': w['support_points'], 'observed_fraction': w['observed_fraction'],
+                                 'planarity_rms_m': w['planarity_rms_m']})
+            walls_out.append({'wall_id': wid, 'start': w['start'], 'end': w['end'],
+                              'length_measurement_id': mid, 'evidence': w['evidence']})
+        measurements.append({'id': f'M-{rid}-floor-area', 'quantity': 'floor_area', 'value': r['area_m2'], **base,
+                             'unit': 'm2', 'method': 'area of room polygon', 'evidence_ids': [rid],
+                             'quality_flags': [] if r['visited'] else ['room_not_entered']})
+
+        c = r['ceiling']
+        if c['height_m'] is not None and c['coverage'] >= min_cov:
+            ceiling = {'status': 'measured', 'measurement_id': f'M-{rid}-ceiling-height'}
+            measurements.append({'id': f'M-{rid}-ceiling-height', 'quantity': 'ceiling_height', 'value': c['height_m'],
+                                 **base, 'method': 'median height above floor plane of ceiling-plane inliers in the room',
+                                 'evidence_ids': ['ceiling-plane', rid], 'quality_flags': [],
+                                 'ceiling_coverage': c['coverage'], 'ceiling_inliers': c['inliers']})
+        else:
+            reason = ('no ceiling plane detected' if plan['ceiling'] is None
+                      else f"ceiling observed over {c['coverage']:.0%} of room < {min_cov:.0%}")
+            ceiling = {'status': 'not_measurable', 'reason': reason}
+            unobservable.append({'quantity': 'ceiling_height', 'room_id': rid, 'reason': reason})
+        unobservable.append({'quantity': 'damage', 'room_id': rid, 'reason': 'damage detection not implemented'})
+        rooms_out.append({
+            'room_id': rid, 'polygon': r['polygon'], 'floor_elevation_m': 0.0,
+            'floor_area_measurement_id': f'M-{rid}-floor-area', 'ceiling': ceiling,
+            'walls': walls_out, 'openings': [], 'damage': [],
+            'quality': {'floor_plane_rms_m': plan['floor']['rms_m'], 'floor_tilt_deg': plan['floor']['tilt_from_up_deg'],
+                        'outline_method': r['outline_method'], 'visited': r['visited'],
+                        'camera_fraction': r['camera_fraction'],
+                        'inferred_walls': sum(w['evidence'] != 'observed' for w in walls_out)},
+        })
+
+    connections_out = []
+    for i, c in enumerate(plan['connections']):
+        cid = f'conn-{i:02d}'
+        entry = {'connection_id': cid, 'rooms': c['room_ids'], 'type': c['type'],
+                 'shared_boundary_m': c['shared_boundary_m'], 'camera_transitions': c['camera_transitions'],
+                 'location': c['location'], 'evidence': c['evidence']}
+        if c['type'] == 'opening' and c['opening_width_m'] is None:
+            entry['opening_width_status'] = 'not_measurable: passage inferred from the camera path only'
+        elif c['type'] == 'opening':
+            mid = f'M-{cid}-opening-width'
+            entry['opening_width_measurement_id'] = mid
+            measurements.append({'id': mid, 'quantity': 'opening_width', 'value': c['opening_width_m'], **base,
+                                 'method': 'extent of contact between room regions through free space',
+                                 'evidence_ids': [cid], 'quality_flags': ['inferred_from_segmentation']})
+        connections_out.append(entry)
+    unobservable.append({'quantity': 'openings', 'room_id': None,
+                         'reason': 'door/window classification and windows within a single room not implemented; '
+                                   'room-to-room openings are listed under connections'})
+    not_entered = [r['room_id'] for r in plan['rooms'] if not r['visited']]
+    if not_entered:
+        warnings.append({'code': 'ROOM_NOT_ENTERED',
+                         'message': f'{not_entered}: geometry seen only from outside, partial coverage likely'})
+    total_area = sum(r['area_m2'] for r in plan['rooms'])
 
     run_id = out.name
     prop = {
@@ -221,14 +263,8 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         'coordinate_frame': {'description': '2D floor frame: origin/axes below are in odometry world coordinates',
                              'origin_world': plan['basis']['origin'], 'x_axis_world': plan['basis']['e1'],
                              'y_axis_world': plan['basis']['e2'], 'up_world': plan['basis']['up']},
-        'rooms': [{
-            'room_id': 'room-00', 'polygon': room['polygon'], 'floor_elevation_m': 0.0,
-            'floor_area_measurement_id': 'M-floor-area', 'ceiling': ceiling,
-            'walls': walls_out, 'openings': [], 'damage': [],
-            'quality': {'floor_plane_rms_m': plan['floor']['rms_m'], 'floor_tilt_deg': plan['floor']['tilt_from_up_deg'],
-                        'inferred_walls': sum(w['evidence'] != 'observed' for w in walls_out)},
-        }],
-        'connections': [], 'measurements': measurements,
+        'rooms': rooms_out,
+        'connections': connections_out, 'measurements': measurements,
         'warnings': warnings, 'unobservable': unobservable,
         'evaluation': [{'status': 'not_evaluable', 'reason': 'no reference measurements'}],
     }
@@ -259,17 +295,30 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         'camera_height_above_floor_m': plan['camera_height_above_floor_m'],
         'room': _plan_summary(plan),
         'wall_detection': {k: v for k, v in plan['wall_detection'].items() if k != 'wall_lines_geometry'},
-        'walls': [{k: w[k] for k in ('length_m', 'support_points', 'observed_fraction', 'planarity_rms_m', 'evidence')}
-                  for w in room['walls']],
+        'segmentation': {k: v for k, v in plan['segmentation'].items() if k != 'labels'},
+        'rooms': [{'room_id': r['room_id'], 'area_m2': r['area_m2'], 'perimeter_m': r['perimeter_m'],
+                   'walls': len(r['walls']), 'observed_walls': sum(w['evidence'] == 'observed' for w in r['walls']),
+                   'visited': r['visited'], 'camera_fraction': r['camera_fraction'],
+                   'outline_method': r['outline_method'], 'ceiling': r['ceiling'],
+                   'clipped_area_m2': r['clipped_area_m2'],
+                   'outline_info': {k: v for k, v in r['outline_info'].items()
+                                    if k not in ('gap_candidates', 'corner_fills')}}
+                  for r in plan['rooms']],
+        'connections': plan['connections'],
+        'walls': [{'room_id': r['room_id'],
+                   **{k: w[k] for k in ('length_m', 'support_points', 'observed_fraction', 'planarity_rms_m', 'evidence')}}
+                  for r in plan['rooms'] for w in r['walls']],
         'half_split_consistency': consistency,
         'accuracy': 'not_evaluable: no reference measurements',
     }
     _dump(out / 'metrics.json', metrics)
     _dump(out / 'intermediates' / 'wall_lines.json', plan['wall_detection'].get('wall_lines_geometry', []))
 
-    title = [f'{cap.capture_id}  run {run_id}  (baseline, poses as-is)',
-             f"floor area {room['area_m2']:.2f} m2   perimeter {room['perimeter_m']:.2f} m   "
-             f"ceiling: {ceiling.get('reason') or format(plan['ceiling_height_m'], '.3f') + ' m'}"]
+    measured = sum(r['ceiling']['status'] == 'measured' for r in rooms_out)
+    title = [f'{cap.capture_id}  run {run_id}  (poses as-is)',
+             f"{len(rooms_out)} room(s), total floor area {total_area:.2f} m2, "
+             f"{sum(c['type'] == 'opening' for c in connections_out)} opening(s); "
+             f"ceiling height measured in {measured}/{len(rooms_out)} room(s)"]
     render_floorplan(out / 'floorplan.png', plan, title)
 
     timings['total'] = round(time.time() - t_start, 2)

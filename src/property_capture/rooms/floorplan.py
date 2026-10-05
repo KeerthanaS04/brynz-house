@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from ..geometry.planes import find_horizontal_plane
+from .segmentation import overlap_area, resolve_overlaps, segment_rooms, to_m
 from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, repair_polygon, snap_polygon,
                     tall_cells)
 
@@ -122,6 +123,41 @@ def _wall_support(a, b, wall2d, cfg):
     }
 
 
+def snap_outline(contour, walls, wcfg):
+    """Wall-snapped outline of a closed contour, or None if no valid outline could be made.
+
+    An invalid outline (coarse simplification crossing a nearby edge, or both sides of a thin
+    notch snapped onto one wall) is first repaired by re-tracing its outer boundary, then
+    retried with finer simplification.
+    """
+    info = {}
+    eps = wcfg['free_simplify_m']
+    snapped = None
+    for _ in range(3):
+        snapped = snap_polygon(contour, walls, {**wcfg, 'free_simplify_m': eps})
+        if snapped is not None and not snapped['simple']:
+            fixed = repair_polygon(snapped['polygon'])
+            if fixed is not None and len(fixed) >= 3 and is_simple_polygon(fixed):
+                snapped = {**snapped, 'polygon': fixed, 'simple': True}
+                info['repaired'] = True
+        if snapped is not None and snapped['simple']:
+            break
+        eps /= 2
+    info['free_simplify_used_m'] = eps
+    if snapped is None or not snapped['simple']:
+        info['fallback_reason'] = 'snapped polygon self-intersects' if snapped is not None else 'snapped polygon degenerate'
+        return None, info
+    info.update({k: snapped[k] for k in ('contour_explained_fraction', 'runs', 'wall_runs',
+                                         'gap_candidates', 'corner_fills')})
+    return snapped, info
+
+
+def _simplified(contour, fcfg):
+    poly = cv2.approxPolyDP(contour.astype(np.float32).reshape(-1, 1, 2), fcfg['simplify_m'], True)[:, 0, :]
+    poly = poly.astype(float)
+    return poly[::-1] if polygon_area(poly) < 0 else poly
+
+
 def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
     """Floor/ceiling planes + room polygon in a 2D frame on the floor plane."""
     floor, ceiling = detect_floor_ceiling(points, up, camera_positions, pcfg, rng)
@@ -152,7 +188,8 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         room = extract_room(band2d, to2d(points[floor_pts]), fcfg)
         if room is not None:
             room.update(describe_polygon(room['polygon'], tall2d, fcfg))
-    elif method == 'wall_snap':
+    segments, walls = [], []
+    if method == 'wall_snap':
         # Interior extent comes from everything observed (walls, furniture, floor) plus the
         # camera path, which is always inside the room; tall cells only define the walls.
         interior = np.vstack([to2d(points[floor_pts]), to2d(camera_positions)])
@@ -160,21 +197,8 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         if room is not None:
             segments = detect_wall_segments(tall2d, wcfg, rng)
             walls = group_collinear(segments, wcfg)
-            # An invalid outline (coarse simplification crossing a nearby edge, or both sides of
-            # a thin notch snapped onto one wall) is first repaired by re-tracing its outer
-            # boundary, then retried with finer simplification, before falling back.
-            eps = wcfg['free_simplify_m']
-            for _ in range(3):
-                snapped = snap_polygon(room['contour_m'], walls, {**wcfg, 'free_simplify_m': eps})
-                if snapped is not None and not snapped['simple']:
-                    fixed = repair_polygon(snapped['polygon'])
-                    if fixed is not None and len(fixed) >= 3 and is_simple_polygon(fixed):
-                        snapped = {**snapped, 'polygon': fixed, 'simple': True}
-                        wall_detection['repaired'] = True
-                if snapped is not None and snapped['simple']:
-                    break
-                eps /= 2
-            wall_detection['free_simplify_used_m'] = eps
+            snapped, snap_info = snap_outline(room['contour_m'], walls, wcfg)
+            wall_detection.update(snap_info)
             wall_detection['sliver_opening'] = room['opening']
             wall_detection.update({
                 'segments': len(segments), 'wall_lines': len(walls),
@@ -183,27 +207,77 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
                                          'observed_length_m': w['observed_length_m'],
                                          'segments': len(w['segments'])} for w in walls],
             })
-            if snapped is not None and snapped['simple']:
-                wall_detection.update({k: snapped[k] for k in ('contour_explained_fraction', 'runs', 'wall_runs',
-                                                               'gap_candidates', 'corner_fills')})
+            if snapped is not None:
                 room.update(describe_polygon(snapped['polygon'], tall2d, fcfg))
             else:
                 wall_detection['polygon_method'] = 'occupancy_fallback'
-                wall_detection['fallback_reason'] = ('snapped polygon self-intersects' if snapped is not None
-                                                     else 'snapped polygon degenerate')
-    else:
+    elif method != 'occupancy':
         raise ValueError(f'unknown floorplan.polygon_method {method!r}')
     if room is None:
         return {'status': 'failed', 'reason': 'no room contour found'}
 
-    ceiling_coverage = None
+    grid = room['grid']
+    ceiling_coverage, ceiling_cells, ceiling_px = None, None, None
     if ceiling is not None:
-        C = _raster(to2d(points[ceiling['inlier_index']]), room['grid']['origin'], room['grid']['cell_m'],
-                    room['grid']['shape'])
+        ceil2d = to2d(points[ceiling['inlier_index']])
+        C = _raster(ceil2d, grid['origin'], grid['cell_m'], grid['shape'])
         k = max(1, int(round(fcfg['close_m'] / fcfg['grid_m'])))
-        C = cv2.morphologyEx(((C > 0) * 255).astype(np.uint8), cv2.MORPH_CLOSE,
-                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)))
-        ceiling_coverage = float(((C > 0) & (room['mask'] > 0)).sum() / max((room['mask'] > 0).sum(), 1))
+        ceiling_cells = cv2.morphologyEx(((C > 0) * 255).astype(np.uint8), cv2.MORPH_CLOSE,
+                                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))) > 0
+        ceiling_coverage = float((ceiling_cells & (room['mask'] > 0)).sum() / max((room['mask'] > 0).sum(), 1))
+        ceiling_px = np.floor((ceil2d - grid['origin']) / grid['cell_m']).astype(int)
+
+    def ceiling_for(mask):
+        if ceiling is None:
+            return {'height_m': None, 'coverage': None, 'inliers': 0}
+        cov = float((ceiling_cells & mask).sum() / max(mask.sum(), 1))
+        ok = ((ceiling_px[:, 0] >= 0) & (ceiling_px[:, 0] < grid['shape'][1]) &
+              (ceiling_px[:, 1] >= 0) & (ceiling_px[:, 1] < grid['shape'][0]))
+        sel = np.zeros(len(ceiling_px), bool)
+        sel[ok] = mask[ceiling_px[ok, 1], ceiling_px[ok, 0]]
+        hs = h[ceiling['inlier_index']][sel]
+        return {'height_m': float(np.median(hs)) if len(hs) else None, 'coverage': cov, 'inliers': int(len(hs))}
+
+    scfg = fcfg['segmentation']
+    segmentation = {'enabled': bool(scfg['enabled'] and method == 'wall_snap')}
+    rooms, connections = [], []
+    if segmentation['enabled']:
+        labels, seg_rooms, connections, seg_stats = segment_rooms(room['mask'], segments, grid,
+                                                                   to2d(camera_positions), scfg)
+        segmentation.update(seg_stats)
+        for r in seg_rooms:
+            rmask = labels == r['label']
+            cs, _ = cv2.findContours(rmask.astype(np.uint8) * 255, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            if not cs:
+                continue
+            contour = to_m(max(cs, key=cv2.contourArea)[:, 0, :], grid)
+            snapped, info = snap_outline(contour, walls, wcfg)
+            poly = snapped['polygon'] if snapped is not None else _simplified(contour, fcfg)
+            rooms.append({**r, **describe_polygon(poly, tall2d, fcfg),
+                          'outline_method': 'wall_snap' if snapped is not None else 'occupancy_fallback',
+                          'outline_info': info, 'mask': rmask, 'ceiling': ceiling_for(rmask)})
+        # Rooms are snapped independently, so outlines can reach into a neighbour; clip them so
+        # no two room interiors overlap (PDF stitch gate: no room overlaps).
+        segmentation['overlap_before_m2'] = overlap_area([r['polygon'] for r in rooms])
+        resolve_overlaps(rooms)
+        for r in rooms:
+            if r['clipped_area_m2'] > 0:
+                r.update(describe_polygon(r['polygon'], tall2d, fcfg))
+        segmentation['overlap_after_m2'] = overlap_area([r['polygon'] for r in rooms])
+        segmentation['outline_area_not_in_rooms_m2'] = room['area_m2'] - sum(r['area_m2'] for r in rooms)
+        segmentation['labels'] = labels
+    else:
+        rmask = room['mask'] > 0
+        rooms.append({'label': 1, 'camera_fraction': 1.0, 'visited': True, 'area_px': int(rmask.sum()),
+                      'clipped_area_m2': 0.0,
+                      **{k: room[k] for k in ('polygon', 'area_m2', 'perimeter_m', 'walls')},
+                      'outline_method': wall_detection['polygon_method'], 'outline_info': {},
+                      'mask': rmask, 'ceiling': ceiling_for(rmask)})
+    for i, r in enumerate(rooms):
+        r['room_id'] = f'room-{i:02d}'
+    label_to_id = {r['label']: r['room_id'] for r in rooms}
+    for c in connections:
+        c['room_ids'] = [label_to_id.get(x) for x in c['rooms']]
 
     return {
         'status': 'ok',
@@ -215,6 +289,9 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         'basis': {'e1': e1, 'e2': e2, 'up': n_f, 'origin': floor['point']},
         'camera_2d': to2d(camera_positions),
         'room': room,
+        'rooms': rooms,
+        'connections': connections,
+        'segmentation': segmentation,
         'wall_detection': wall_detection,
         'wall_band_points': int(band.sum()),
         'floor_inlier_points': int(floor_pts.sum()),
