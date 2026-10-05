@@ -43,6 +43,22 @@ def summarize(run_dir):
         'outline repaired': _get(m, 'wall_detection.repaired'),
         'gap candidates': len(_get(m, 'wall_detection.gap_candidates') or []),
         'corner fills': len(_get(m, 'wall_detection.corner_fills') or []),
+        'rooms': len(m.get('rooms') or []) or None,
+        'room areas (m2)': ', '.join(f"{r['area_m2']:.1f}" for r in m.get('rooms') or []) or None,
+        'rooms not entered': sum(not r['visited'] for r in m.get('rooms') or []) if m.get('rooms') else None,
+        'room outlines falling back': sum(r['outline_method'] != 'wall_snap' for r in m.get('rooms') or [])
+        if m.get('rooms') else None,
+        'openings (widths m; ? = camera path only)': ', '.join(
+            f"{c['opening_width_m']:.2f}" if c['opening_width_m'] is not None else '?'
+            for c in m.get('connections') or [] if c['type'] == 'opening') or None,
+        'shared walls': sum(c['type'] == 'shared_wall' for c in m.get('connections') or []) if m.get('rooms') else None,
+        'room overlap before / after clipping (m2)':
+            f"{_fmt(_get(m, 'segmentation.overlap_before_m2'))} / {_fmt(_get(m, 'segmentation.overlap_after_m2'))}",
+        'outline area not in any room (m2)': _get(m, 'segmentation.outline_area_not_in_rooms_m2'),
+        'ceiling heights (m, coverage)': ', '.join(
+            f"{r['ceiling']['height_m']:.2f} ({r['ceiling']['coverage']:.0%})" for r in m.get('rooms') or []
+            if r['ceiling'].get('height_m') is not None) or None,
+        'half-split rooms (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.rooms'))} / {_fmt(_get(hs, 'second_half.rooms'))}",
         'half-split methods (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.polygon_method'))} / "
                                           f"{_fmt(_get(hs, 'second_half.polygon_method'))}",
         'half-split edges (1st / 2nd)': f"{_fmt(_get(hs, 'first_half.walls'))} / {_fmt(_get(hs, 'second_half.walls'))}",

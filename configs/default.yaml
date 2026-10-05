@@ -49,6 +49,16 @@ floorplan:
   min_observed_fraction: 0.5
   open_min_area_kept: 0.95    # sliver removal is rejected if the room region would lose more than 5% of its area
   polygon_method: wall_snap   # wall_snap | occupancy (Phase 0 baseline)
+  segmentation:               # split into rooms at doorways (wall_snap only)
+    enabled: true
+    door_max_width_m: 1.0     # passages narrower than this separate rooms; wider openings stay open-plan
+    barrier_thickness_m: 0.06 # detected wall segments drawn as barriers this thick
+    min_seed_area_m2: 0.5     # free space left after shrinking must be at least this to seed a room
+    min_room_area_m2: 2.0     # smaller regions join the neighbour they touch most
+    visited_min_camera_fraction: 0.02
+    min_opening_width_m: 0.4
+    min_shared_wall_m: 0.5
+    max_wall_thickness_m: 0.30 # rooms within this distance across a wall share it (both wall faces are detected)
   walls:
     cell_m: 0.04
     height_bin_m: 0.10
