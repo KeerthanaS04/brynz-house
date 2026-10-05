@@ -58,6 +58,15 @@ def summarize(run_dir):
                 if r['ceiling']['status'] == 'measured' else r['ceiling']['reason'])
             if r['ceiling'].get('candidate_height_m') is not None else (r['ceiling'].get('reason') or '—')
             for r in m.get('rooms') or []) or None,
+        'shared walls (thickness cm; ? = faces not parallel)': (
+            f"{_get(m, 'shared_walls.count')} ("
+            + ', '.join(f'{100 * t:.0f}' if t is not None else f'~{100 * c:.0f}?'
+                        for t, c in zip(_get(m, 'shared_walls.thickness_m') or [],
+                                        _get(m, 'shared_walls.candidate_thickness_m') or [])) + ')'
+            if _get(m, 'shared_walls') else None),
+        'shared-wall gap area (m2) / outline jogs excluded': (
+            f"{_fmt(_get(m, 'shared_walls.gap_area_m2'))} / {_get(m, 'shared_walls.excluded_outline_jogs')}"
+            if _get(m, 'shared_walls') else None),
         'room overlap before / after clipping (m2)':
             f"{_fmt(_get(m, 'segmentation.overlap_before_m2'))} / {_fmt(_get(m, 'segmentation.overlap_after_m2'))}",
         'outline area not in any room (m2)': _get(m, 'segmentation.outline_area_not_in_rooms_m2'),

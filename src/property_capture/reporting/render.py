@@ -83,6 +83,15 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
         for i, line in enumerate(lines):
             _text(img, line, (c[0], c[1] + 18 * (i - (len(lines) - 1) / 2)), 0.5, colour, 1)
 
+    for sw in plan.get('shared_walls') or []:
+        for cl in sw['centrelines']:
+            a, b = np.rint(to_px(np.array(cl))).astype(int)
+            cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), (60, 60, 60), 1, cv2.LINE_AA)
+        longest = max(sw['centrelines'], key=lambda cl: np.linalg.norm(np.subtract(cl[1], cl[0])))
+        label = (f"t {100 * sw['thickness_m']:.0f} cm" if sw['thickness_m'] is not None
+                 else f"t ~{100 * sw['candidate_thickness_m']:.0f} cm?")
+        _text(img, label, to_px(np.mean(longest, axis=0))[0], 0.38, (60, 60, 60))
+
     for conn in plan.get('connections') or []:
         p = to_px(conn['location'])[0].astype(int)
         if conn['type'] == 'opening':
