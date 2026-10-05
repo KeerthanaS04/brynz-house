@@ -129,6 +129,11 @@ floorplan:
     min_overlap_m: 0.30
     group_tolerance_m: 0.05   # face pairs further than this from their wall's thickness are outline jogs
     max_thickness_variation_m: 0.04  # thickness is measured only if the faces stay parallel within this
+    align: true               # rotate both faces of each shared wall to one direction (rooms/wall_alignment.py)
+    align_min_corner_deg: 20.0  # neighbouring edges closer to parallel than this: project the corner instead
+    align_max_area_change: 0.02  # skip a wall if a room's area would change by more than 2%
+    align_max_new_overlap_m2: 0.001
+    align_trim_overlap_m2: 0.05     # a corner overlap this small between the wall's own two rooms is trimmed
   ceiling:                    # rooms/ceiling.py: when a room's ceiling height is measurable
     cell_m: 0.25              # one level per cell; cells, not points, count as independent evidence
     min_cells: 8              # >= 0.5 m2 of ceiling seen in the room

@@ -458,6 +458,18 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                                     if k not in ('gap_candidates', 'corner_fills')}}
                   for r in plan['rooms']],
         'connections': plan['connections'],
+        'wall_alignment': {
+            'aligned': sum(a['status'] == 'aligned' for a in plan['wall_alignment']),
+            'skipped': [{k: a[k] for k in ('shared_wall_id', 'rooms', 'reason')}
+                        for a in plan['wall_alignment'] if a['status'] == 'skipped'],
+            'rotation_deg': [round(a['max_rotation_deg'], 3) for a in plan['wall_alignment']
+                             if a['status'] == 'aligned'],
+            'area_change_m2': [round(v, 4) for a in plan['wall_alignment'] if a['status'] == 'aligned'
+                               for v in a['area_change_m2'].values()],
+            'fallbacks': [{k: a[k] for k in ('shared_wall_id', 'scope', 'notes')}
+                          for a in plan['wall_alignment'] if a['status'] == 'aligned'
+                          and (a['scope'] != 'all faces' or a['notes'])],
+        },
         'shared_walls': {
             'count': len(plan['shared_walls']),
             'thickness_m': [round(s['thickness_m'], 4) if s['thickness_m'] is not None else None
