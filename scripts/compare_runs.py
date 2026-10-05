@@ -64,6 +64,10 @@ def summarize(run_dir):
                         for t, c in zip(_get(m, 'shared_walls.thickness_m') or [],
                                         _get(m, 'shared_walls.candidate_thickness_m') or [])) + ')'
             if _get(m, 'shared_walls') else None),
+        'shared walls aligned / skipped (max rotation deg)': (
+            f"{_get(m, 'wall_alignment.aligned')} / {len(_get(m, 'wall_alignment.skipped') or [])} "
+            f"({_fmt(max(_get(m, 'wall_alignment.rotation_deg') or [0.0]))})"
+            if _get(m, 'wall_alignment') else None),
         'shared-wall gap area (m2) / outline jogs excluded': (
             f"{_fmt(_get(m, 'shared_walls.gap_area_m2'))} / {_get(m, 'shared_walls.excluded_outline_jogs')}"
             if _get(m, 'shared_walls') else None),
