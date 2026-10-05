@@ -37,6 +37,31 @@ rgb:                           # calibration/rgb_alignment.py: depth vs RGB alig
   temporal_min_fraction: 0.5   # paired video frame should align best in at least half the frames
   preview_frames: 4
 
+openings:                      # rooms/openings.py: doors, windows and other openings from camera rays
+  enabled: true
+  frame_stride: 6
+  pixel_step: 4
+  confidence_min: 2
+  cell_m: 0.02                 # elevation grid along the wall x height; also the width resolution
+  wall_band_m: 0.05            # ray ends within this of the wall plane: wall evidence
+  through_min_beyond_m: 0.10   # ray ends this far beyond the wall plane: seen through
+  min_through: 2
+  through_ratio: 2.0           # open cell: seen through >= 2x as often as seen as wall
+  close_m: 0.06
+  core_column_fraction: 0.5    # width from columns covering >= 50% of the opening's height
+  min_width_m: 0.40
+  min_height_m: 0.30
+  min_edge_length_m: 0.50
+  default_height_m: 2.6        # wall height searched when the room's ceiling is unknown
+  jamb_extend_m: 0.30          # grid extends past edge ends: a doorway often ends an edge, its jamb is on the next
+  passage_head_margin_m: 0.10  # floor-to-ceiling openings (head within this of the ceiling) are passages
+  jamb_check_m: 0.10           # wall must be seen beside the opening on both sides...
+  jamb_min_fraction: 0.3       # ...over >= 30% of the opening's height
+  door_max_sill_m: 0.10
+  door_min_head_m: 1.80
+  window_min_sill_m: 0.30
+  match_connection_m: 0.5      # a door this close to a room-to-room opening confirms it
+
 drift:                         # registration/pose_graph.py (default) or registration/drift.py
   enabled: true
   method: pose_graph           # pose_graph | keyframe_to_map (superseded: lost to device poses, reports/drift)

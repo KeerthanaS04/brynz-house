@@ -27,6 +27,7 @@ from .registration.pose_graph import correct_drift_pose_graph
 from .reporting import provenance
 from .reporting.render import render_floorplan
 from .rooms.floorplan import build_floorplan
+from .rooms.openings import detect_openings
 
 SCHEMA_VERSION = '0.1.0-baseline'
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -276,6 +277,17 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         warnings.append({'code': 'WALL_SNAP_FALLBACK', 'message': wd['fallback_reason']})
     stage('floorplan', t0)
 
+    openings, open_gaps, open_stats = [], [], {'enabled': bool(cfg['openings']['enabled'])}
+    if cfg['openings']['enabled']:
+        t0 = time.time()
+        openings, open_gaps, stats_ = detect_openings(cap, T, axes, plan, cfg['openings'], cfg['depth'])
+        open_stats.update(stats_)
+        plan['openings'] = openings
+        log.info('openings: %d found (%d physical; %s), %d unbounded gaps excluded', len(openings),
+                 stats_['physical_openings'], ', '.join(f"{o['type']} {o['width_m']:.2f} m" for o in openings),
+                 len(open_gaps))
+        stage('openings', t0)
+
     if drift['enabled'] and dcfg_drift['ablation']:
         # PDF drift gate: the stitched footprint with correction on and off. The main plan uses
         # whichever trajectory was kept; the other one is built here.
@@ -316,6 +328,26 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
     measurements, rooms_out = [], []
     base = {'unit': 'm', 'interval': None, 'uncertainty_status': 'uncalibrated',
             'calibration_status': 'no reference measurements (assumptions.md B-21)'}
+
+    def room_openings(rid):
+        out_ = []
+        for o in openings:
+            if o['room_id'] != rid:
+                continue
+            mid = f"M-{o['opening_id']}-width"
+            measurements.append({
+                'id': mid, 'quantity': 'opening_width', 'value': o['width_m'], **base,
+                'method': 'extent of wall cells seen through by camera rays, edges refined by through fraction',
+                'evidence_ids': [o['opening_id'], f"{rid}-wall-{o['edge']:02d}"],
+                'quality_flags': [] if o['matches_connection'] or o['type'] == 'window' else ['not_confirmed_by_segmentation'],
+                'width_resolution_m': o['width_resolution_m'], 'through_rays': o['through_rays']})
+            out_.append({'opening_id': o['opening_id'], 'type': o['type'], 'wall_id': f"{rid}-wall-{o['edge']:02d}",
+                         'width_measurement_id': mid, 'height_m': o['height_m'], 'sill_m': o['sill_m'],
+                         'head_m': o['head_m'], 'start': o['start'], 'end': o['end'], 'same_as': o['same_as'],
+                         'matches_room_connection': o['matches_connection'], 'accepted_by': o['accepted_by'],
+                         'evidence': 'observed: camera rays passed through the wall plane here'})
+        return out_
+
     for r in plan['rooms']:
         rid = r['room_id']
         snapped = r['outline_method'] == 'wall_snap'
@@ -356,7 +388,7 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         rooms_out.append({
             'room_id': rid, 'polygon': r['polygon'], 'floor_elevation_m': 0.0,
             'floor_area_measurement_id': f'M-{rid}-floor-area', 'ceiling': ceiling,
-            'walls': walls_out, 'openings': [], 'damage': [],
+            'walls': walls_out, 'openings': room_openings(rid), 'damage': [],
             'quality': {'floor_plane_rms_m': plan['floor']['rms_m'], 'floor_tilt_deg': plan['floor']['tilt_from_up_deg'],
                         'outline_method': r['outline_method'], 'visited': r['visited'],
                         'camera_fraction': r['camera_fraction'],
@@ -397,8 +429,9 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
             entry['candidate_thickness_m'] = sw['candidate_thickness_m']
         shared_out.append(entry)
     unobservable.append({'quantity': 'openings', 'room_id': None,
-                         'reason': 'door/window classification and windows within a single room not implemented; '
-                                   'room-to-room openings are listed under connections'})
+                         'reason': 'openings are detected only where the camera saw through them; closed doors '
+                                   'and covered windows are not detected' if cfg['openings']['enabled'] else
+                                   'opening detection disabled; room-to-room openings are listed under connections'})
     not_entered = [r['room_id'] for r in plan['rooms'] if not r['visited']]
     if not_entered:
         warnings.append({'code': 'ROOM_NOT_ENTERED',
@@ -458,6 +491,14 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                                     if k not in ('gap_candidates', 'corner_fills')}}
                   for r in plan['rooms']],
         'connections': plan['connections'],
+        'openings': {
+            **{k: v for k, v in open_stats.items()},
+            'found': [{k: o[k] for k in ('opening_id', 'type', 'width_m', 'height_m', 'sill_m', 'head_m', 'same_as',
+                                         'matches_connection', 'accepted_by', 'through_rays', 'jamb_wall_fraction')}
+                      for o in openings],
+            'unbounded_gaps_excluded': [{k: o[k] for k in ('room_id', 'edge', 'type', 'width_m', 'sill_m', 'head_m',
+                                                          'jamb_wall_fraction')} for o in open_gaps],
+        },
         'wall_alignment': {
             'aligned': sum(a['status'] == 'aligned' for a in plan['wall_alignment']),
             'skipped': [{k: a[k] for k in ('shared_wall_id', 'rooms', 'reason')}
