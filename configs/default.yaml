@@ -47,6 +47,32 @@ floorplan:
   wall_support_m: 0.05
   observed_bin_m: 0.05
   min_observed_fraction: 0.5
+  polygon_method: wall_snap   # wall_snap | occupancy (Phase 0 baseline)
+  walls:
+    cell_m: 0.04
+    height_bin_m: 0.10
+    tall_fraction: 0.5        # cell must have points in >= 50% of the wall band's height bins
+    ransac_threshold_m: 0.03
+    ransac_iterations: 300
+    sample_radius_m: [0.2, 1.0]
+    min_inliers: 15
+    max_lines: 60
+    max_gap_m: 0.25           # larger gaps split a line into segments (doors, windows)
+    min_segment_m: 0.4
+    min_segment_points: 10
+    merge_angle_deg: 3.0
+    merge_offset_m: 0.05
+    snap_distance_m: 0.10
+    extent_margin_m: 0.30
+    min_run_m: 0.25
+    adjacent_merge_angle_deg: 5.0   # neighbouring runs on near-parallel lines this close are one wall
+    adjacent_merge_offset_m: 0.10
+    free_simplify_m: 0.05
+    corner_min_angle_deg: 20.0
+    corner_fill_radius_m: 0.6       # unexplained contour within this distance of a wall intersection is a hidden corner
+    max_corner_shift_m: 0.5
+    min_edge_m: 0.05
+    collinear_m: 0.01
 
 consistency:
   split_halves: true

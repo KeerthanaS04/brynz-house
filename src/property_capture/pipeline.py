@@ -55,7 +55,8 @@ def _plan_summary(plan):
     if plan['status'] != 'ok':
         return {'status': plan['status'], 'reason': plan.get('reason')}
     r = plan['room']
-    return {'status': 'ok', 'area_m2': r['area_m2'], 'perimeter_m': r['perimeter_m'],
+    return {'status': 'ok', 'polygon_method': plan['wall_detection']['polygon_method'],
+            'area_m2': r['area_m2'], 'perimeter_m': r['perimeter_m'],
             'walls': len(r['walls']), 'ceiling_height_m': plan['ceiling_height_m'],
             'ceiling_coverage': plan['ceiling_coverage']}
 
@@ -70,10 +71,28 @@ def _floorplan_with_sign_check(points, up, cap, cfg, rng):
     return plan, 'unresolved'
 
 
-def run(input_path, config_path, output_dir, gates_path):
+def apply_overrides(cfg, overrides):
+    """Apply 'a.b.c=value' overrides (value parsed as YAML) to a nested config dict."""
+    for item in overrides or []:
+        key, sep, raw = item.partition('=')
+        if not sep:
+            raise ValueError(f'override {item!r} is not KEY=VALUE')
+        node = cfg
+        *parents, leaf = key.split('.')
+        for p in parents:
+            if p not in node or not isinstance(node[p], dict):
+                raise KeyError(f'override {key!r}: no config section {p!r}')
+            node = node[p]
+        if leaf not in node:
+            raise KeyError(f'override {key!r}: unknown config key {leaf!r}')
+        node[leaf] = yaml.safe_load(raw)
+    return cfg
+
+
+def run(input_path, config_path, output_dir, gates_path, overrides=None):
     t_start = time.time()
     with open(config_path, encoding='utf-8') as f:
-        cfg = yaml.safe_load(f)
+        cfg = apply_overrides(yaml.safe_load(f), overrides)
     rng = np.random.default_rng(cfg['seed'])
 
     out = Path(output_dir)
@@ -133,6 +152,9 @@ def run(input_path, config_path, output_dir, gates_path):
         raise RuntimeError(f"floor plan failed: {plan.get('reason')}")
     if sign != 'as_estimated':
         warnings.append({'code': 'GRAVITY_SIGN', 'message': f'up vector sign {sign} after floor plausibility check'})
+    wd = plan['wall_detection']
+    if wd['polygon_method'] == 'occupancy_fallback':
+        warnings.append({'code': 'WALL_SNAP_FALLBACK', 'message': wd['fallback_reason']})
     stage('floorplan', t0)
 
     consistency = None
@@ -163,7 +185,9 @@ def run(input_path, config_path, output_dir, gates_path):
         mid = f'M-wall-{i:02d}'
         flags = [] if w['evidence'] == 'observed' else ['inferred_low_support']
         measurements.append({'id': mid, 'quantity': 'wall_length', 'value': w['length_m'], **base,
-                             'method': 'edge of simplified occupancy contour on floor plane',
+                             'method': ('edge of wall-snapped room polygon on floor plane'
+                                        if plan['wall_detection']['polygon_method'] == 'wall_snap'
+                                        else 'edge of simplified occupancy contour on floor plane'),
                              'evidence_ids': [f'wall-{i:02d}'], 'quality_flags': flags,
                              'support_points': w['support_points'], 'observed_fraction': w['observed_fraction'],
                              'planarity_rms_m': w['planarity_rms_m']})
@@ -234,12 +258,14 @@ def run(input_path, config_path, output_dir, gates_path):
         'ceiling_coverage': plan['ceiling_coverage'],
         'camera_height_above_floor_m': plan['camera_height_above_floor_m'],
         'room': _plan_summary(plan),
+        'wall_detection': {k: v for k, v in plan['wall_detection'].items() if k != 'wall_lines_geometry'},
         'walls': [{k: w[k] for k in ('length_m', 'support_points', 'observed_fraction', 'planarity_rms_m', 'evidence')}
                   for w in room['walls']],
         'half_split_consistency': consistency,
         'accuracy': 'not_evaluable: no reference measurements',
     }
     _dump(out / 'metrics.json', metrics)
+    _dump(out / 'intermediates' / 'wall_lines.json', plan['wall_detection'].get('wall_lines_geometry', []))
 
     title = [f'{cap.capture_id}  run {run_id}  (baseline, poses as-is)',
              f"floor area {room['area_m2']:.2f} m2   perimeter {room['perimeter_m']:.2f} m   "
@@ -249,7 +275,8 @@ def run(input_path, config_path, output_dir, gates_path):
     timings['total'] = round(time.time() - t_start, 2)
     _dump(out / 'run_info.json', {
         'run_id': run_id, 'finished_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        'input': str(input_path), 'config_path': str(config_path), 'config': cfg,
+        'input': str(input_path), 'config_path': str(config_path), 'overrides': list(overrides or []),
+        'config': cfg,
         'gates_path': str(gates_path), 'timings_s': timings, **prov,
     })
     log.info('run complete in %.1f s -> %s', timings['total'], out)

@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from ..geometry.planes import find_horizontal_plane
+from .walls import detect_wall_segments, group_collinear, snap_polygon, tall_cells
 
 
 def horizontal_basis(up):
@@ -41,8 +42,11 @@ def _raster(p, lo, g, shape):
     return img
 
 
-def extract_room(wall2d, floor2d, cfg):
+def extract_room(wall2d, floor2d, cfg, wall_min_points=None):
+    """Occupancy contour of wall + floor points. wall_min_points overrides the config count
+    (1 for tall-cell centres, which are already one filtered point per cell)."""
     g = cfg['grid_m']
+    wall_min = cfg['wall_min_points'] if wall_min_points is None else wall_min_points
     allp = np.vstack([wall2d, floor2d])
     lo = allp.min(axis=0) - 0.5
     hi = allp.max(axis=0) + 0.5
@@ -50,7 +54,7 @@ def extract_room(wall2d, floor2d, cfg):
     W = _raster(wall2d, lo, g, shape)
     F = _raster(floor2d, lo, g, shape)
 
-    occ = (((W >= cfg['wall_min_points']) | (F >= 1)) * 255).astype(np.uint8)
+    occ = (((W >= wall_min) | (F >= 1)) * 255).astype(np.uint8)
     k = max(1, int(round(cfg['close_m'] / g)))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))
     occ = cv2.morphologyEx(occ, cv2.MORPH_CLOSE, kernel)
@@ -64,19 +68,18 @@ def extract_room(wall2d, floor2d, cfg):
     poly = (approx + 0.5) * g + lo
     if polygon_area(poly) < 0:
         poly = poly[::-1]
-
-    walls = []
-    for i in range(len(poly)):
-        a, b = poly[i], poly[(i + 1) % len(poly)]
-        walls.append(_wall_support(a, b, wall2d, cfg))
     return {
-        'polygon': poly,
-        'area_m2': polygon_area(poly),
-        'perimeter_m': float(sum(w['length_m'] for w in walls)),
-        'walls': walls,
+        **describe_polygon(poly, wall2d, cfg),
+        'contour_m': (c[:, 0, :].astype(float) + 0.5) * g + lo,
         'grid': {'origin': lo, 'cell_m': g, 'shape': shape},
         'mask': mask, 'wall_counts': W, 'floor_counts': F,
     }
+
+
+def describe_polygon(poly, wall2d, cfg):
+    walls = [_wall_support(poly[i], poly[(i + 1) % len(poly)], wall2d, cfg) for i in range(len(poly))]
+    return {'polygon': poly, 'area_m2': polygon_area(poly),
+            'perimeter_m': float(sum(w['length_m'] for w in walls)), 'walls': walls}
 
 
 def _wall_support(a, b, wall2d, cfg):
@@ -120,7 +123,41 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
     e1, e2 = horizontal_basis(n_f)
     to2d = lambda P: np.stack([P @ e1, P @ e2], axis=1)
     floor_pts = np.abs(h) < fcfg['floor_inlier_m']
-    room = extract_room(to2d(points[band]), to2d(points[floor_pts]), fcfg)
+    band2d = to2d(points[band])
+    method = fcfg['polygon_method']
+    wall_detection = {'polygon_method': method}
+
+    if method == 'occupancy':
+        room = extract_room(band2d, to2d(points[floor_pts]), fcfg)
+    elif method == 'wall_snap':
+        wcfg = fcfg['walls']
+        tall2d, tall_stats = tall_cells(band2d, h[band], fcfg['wall_band_above_floor_m'], top, wcfg)
+        wall_detection.update(tall_stats)
+        # Interior extent comes from everything observed (walls, furniture, floor) plus the
+        # camera path, which is always inside the room; tall cells only define the walls.
+        interior = np.vstack([to2d(points[floor_pts]), to2d(camera_positions)])
+        room = extract_room(band2d, interior, fcfg)
+        if room is not None:
+            segments = detect_wall_segments(tall2d, wcfg, rng)
+            walls = group_collinear(segments, wcfg)
+            snapped = snap_polygon(room['contour_m'], walls, wcfg)
+            wall_detection.update({
+                'segments': len(segments), 'wall_lines': len(walls),
+                'wall_lines_geometry': [{'start': (w['centre'] + w['extent'][0] * w['direction']).tolist(),
+                                         'end': (w['centre'] + w['extent'][1] * w['direction']).tolist(),
+                                         'observed_length_m': w['observed_length_m'],
+                                         'segments': len(w['segments'])} for w in walls],
+            })
+            if snapped is not None and snapped['simple']:
+                wall_detection.update({k: snapped[k] for k in ('contour_explained_fraction', 'runs', 'wall_runs',
+                                                               'gap_candidates', 'corner_fills')})
+                room.update(describe_polygon(snapped['polygon'], tall2d, fcfg))
+            else:
+                wall_detection['polygon_method'] = 'occupancy_fallback'
+                wall_detection['fallback_reason'] = ('snapped polygon self-intersects' if snapped is not None
+                                                     else 'snapped polygon degenerate')
+    else:
+        raise ValueError(f'unknown floorplan.polygon_method {method!r}')
     if room is None:
         return {'status': 'failed', 'reason': 'no room contour found'}
 
@@ -143,6 +180,7 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         'basis': {'e1': e1, 'e2': e2, 'up': n_f, 'origin': floor['point']},
         'camera_2d': to2d(camera_positions),
         'room': room,
+        'wall_detection': wall_detection,
         'wall_band_points': int(band.sum()),
         'floor_inlier_points': int(floor_pts.sum()),
     }
