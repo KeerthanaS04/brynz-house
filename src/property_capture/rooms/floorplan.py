@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from ..geometry.planes import find_horizontal_plane
+from .ceiling import assess_ceiling, level_stats
 from .segmentation import overlap_area, resolve_overlaps, segment_rooms, to_m
 from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, repair_polygon, snap_polygon,
                     tall_cells)
@@ -217,7 +218,7 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         return {'status': 'failed', 'reason': 'no room contour found'}
 
     grid = room['grid']
-    ceiling_coverage, ceiling_cells, ceiling_px = None, None, None
+    ceiling_coverage, ceiling_cells = None, None
     if ceiling is not None:
         ceil2d = to2d(points[ceiling['inlier_index']])
         C = _raster(ceil2d, grid['origin'], grid['cell_m'], grid['shape'])
@@ -225,18 +226,28 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         ceiling_cells = cv2.morphologyEx(((C > 0) * 255).astype(np.uint8), cv2.MORPH_CLOSE,
                                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))) > 0
         ceiling_coverage = float((ceiling_cells & (room['mask'] > 0)).sum() / max((room['mask'] > 0).sum(), 1))
-        ceiling_px = np.floor((ceil2d - grid['origin']) / grid['cell_m']).astype(int)
+
+    ccfg = fcfg['ceiling']
+    floor2d, floor_h = to2d(points[floor_pts]), h[floor_pts]
+    floor_all = level_stats(floor2d, floor_h, ccfg['cell_m'], ccfg['min_sigma_m'])
+
+    def in_mask(xy, mask):
+        px = np.floor((xy - grid['origin']) / grid['cell_m']).astype(int)
+        ok = (px[:, 0] >= 0) & (px[:, 0] < grid['shape'][1]) & (px[:, 1] >= 0) & (px[:, 1] < grid['shape'][0])
+        sel = np.zeros(len(xy), bool)
+        sel[ok] = mask[px[ok, 1], px[ok, 0]]
+        return sel
 
     def ceiling_for(mask):
         if ceiling is None:
-            return {'height_m': None, 'coverage': None, 'inliers': 0}
+            return {'status': 'not_measurable', 'reason': 'no ceiling plane detected', 'height_m': None,
+                    'candidate_height_m': None, 'coverage': None, 'inliers': 0}
         cov = float((ceiling_cells & mask).sum() / max(mask.sum(), 1))
-        ok = ((ceiling_px[:, 0] >= 0) & (ceiling_px[:, 0] < grid['shape'][1]) &
-              (ceiling_px[:, 1] >= 0) & (ceiling_px[:, 1] < grid['shape'][0]))
-        sel = np.zeros(len(ceiling_px), bool)
-        sel[ok] = mask[ceiling_px[ok, 1], ceiling_px[ok, 0]]
-        hs = h[ceiling['inlier_index']][sel]
-        return {'height_m': float(np.median(hs)) if len(hs) else None, 'coverage': cov, 'inliers': int(len(hs))}
+        sel = in_mask(ceil2d, mask)
+        ceil = level_stats(ceil2d[sel], h[ceiling['inlier_index']][sel], ccfg['cell_m'], ccfg['min_sigma_m'])
+        fsel = in_mask(floor2d, mask)
+        floor_room = level_stats(floor2d[fsel], floor_h[fsel], ccfg['cell_m'], ccfg['min_sigma_m'])
+        return assess_ceiling(ceil, floor_room, floor_all, ccfg, coverage=cov)
 
     scfg = fcfg['segmentation']
     segmentation = {'enabled': bool(scfg['enabled'] and method == 'wall_snap')}

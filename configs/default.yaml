@@ -87,7 +87,6 @@ planes:
   ceiling_min_fraction: 0.01
   floor_below_camera_m: 0.3
   ceiling_above_camera_m: 0.1
-  ceiling_min_coverage: 0.3
 
 floorplan:
   grid_m: 0.02
@@ -103,6 +102,15 @@ floorplan:
   min_observed_fraction: 0.5
   open_min_area_kept: 0.95    # sliver removal is rejected if the room region would lose more than 5% of its area
   polygon_method: wall_snap   # wall_snap | occupancy (Phase 0 baseline)
+  ceiling:                    # rooms/ceiling.py: when a room's ceiling height is measurable
+    cell_m: 0.25              # one level per cell; cells, not points, count as independent evidence
+    min_cells: 8              # >= 0.5 m2 of ceiling seen in the room
+    min_floor_cells: 8        # else the floor level comes from all floor points
+    max_flatness_iqr_m: 0.015 # per-cell ceiling levels must agree within the PDF tolerance
+    max_standard_error_m: 0.005  # 3 x standard error within the 1.5 cm ceiling-height gate
+    min_sigma_m: 0.002        # floor on the per-cell spread (depth noise), so a few identical cells do not claim 0 error
+    min_height_m: 2.0         # plausible ceiling heights; lower is likely a furniture top
+    max_height_m: 6.0
   segmentation:               # split into rooms at doorways (wall_snap only)
     enabled: true
     door_max_width_m: 1.0     # passages narrower than this separate rooms; wider openings stay open-plan
