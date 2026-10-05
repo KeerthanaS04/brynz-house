@@ -46,7 +46,7 @@ Runtime on the development laptop: 21 s, 50 s, 95 s.
 
 ## Known failures (input to the fix loop)
 
-1. **Outline is not a wall plan.** The contour follows everything in the 0.3–2.0 m height band, including furniture and depth seen through doors and windows, giving 106–190 short edges instead of a handful of walls. Next: fit vertical wall planes and build the polygon from them, and separate clutter from structure.
+1. **Outline is not a wall plan.** The contour follows everything in the 0.3–2.0 m height band, including furniture and depth seen through doors and windows, giving 106–190 short edges instead of a handful of walls. *Partly addressed by the wall-snapped outline (`reports/wall_snap/README.md`): 42–86 edges, outer walls as single edges; 40–47% of the outline is still unexplained by walls.*
 2. **Outline area depends on coverage.** single_room half-split areas differ by 4.2 m² because each half sees different parts of the room. floor_only and with_ceiling likely span more than one room (67–78 m²); room segmentation is not implemented.
 3. **Ceiling coverage threshold (30%) is unjustified.** with_ceiling has a clean 3.08 m plane (RMS 7.3 mm, tilt 0.03°) seen over 22% of the outline, which is itself inflated by failure 1. The threshold needs a basis before it decides measurability.
 4. **Drift: poses used as-is.** The floor_only 0.31 m tracking jump (B-19) is fused unchanged.

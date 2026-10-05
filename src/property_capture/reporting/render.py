@@ -30,6 +30,9 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
         ok = (px[:, 0] >= 0) & (px[:, 0] < w) & (px[:, 1] >= 0) & (px[:, 1] < h)
         img[px[ok, 1], px[ok, 0]] = colour
 
+    for wl in plan.get('wall_detection', {}).get('wall_lines_geometry', []):
+        a, b = np.rint(to_px(np.array([wl['start'], wl['end']]))).astype(int)
+        cv2.line(img, tuple(int(v) for v in a), tuple(int(v) for v in b), (150, 150, 240), 3, cv2.LINE_AA)
     cv2.polylines(img, [np.rint(to_px(cam)).astype(np.int32).reshape(-1, 1, 2)], False, (200, 140, 60), 1, cv2.LINE_AA)
     ppoly = np.rint(to_px(poly)).astype(np.int32)
     cv2.polylines(img, [ppoly.reshape(-1, 1, 2)], True, (20, 20, 20), 2, cv2.LINE_AA)
@@ -51,6 +54,7 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
     x0, y0 = 12, h - 40
     cv2.line(img, (x0, y0), (x0 + px_per_m, y0), (0, 0, 0), 2)
     cv2.putText(img, '1 m', (x0 + px_per_m + 6, y0 + 5), FONT, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
-    cv2.putText(img, '* inferred wall (low point support). Blue line: camera path. All values UNCALIBRATED.',
+    cv2.putText(img, '* inferred wall (low point support). Blue: camera path. Pink: detected wall lines. '
+                     'All values UNCALIBRATED.',
                 (12, h - 14), FONT, 0.42, (60, 60, 60), 1, cv2.LINE_AA)
     cv2.imwrite(str(path), img)

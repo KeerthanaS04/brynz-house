@@ -20,6 +20,8 @@ def main(argv=None):
     r.add_argument('--config', default=str(REPO_ROOT / 'configs' / 'default.yaml'))
     r.add_argument('--gates', default=str(REPO_ROOT / 'configs' / 'evaluation' / 'gates.yaml'))
     r.add_argument('--output', help='fresh run directory (default outputs/run_<UTC time>)')
+    r.add_argument('--set', action='append', default=[], metavar='KEY=VALUE',
+                   help='override a config value, e.g. --set floorplan.polygon_method=occupancy (repeatable)')
 
     args = ap.parse_args(argv)
     if args.command == 'audit':
@@ -31,7 +33,7 @@ def main(argv=None):
     output = args.output or str(REPO_ROOT / 'outputs' /
                                 f"run_{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}")
     try:
-        return run(args.input, args.config, output, args.gates)
+        return run(args.input, args.config, output, args.gates, overrides=args.set)
     except Exception as e:
         print(f'pipeline failed: {e}', file=sys.stderr)
         raise
