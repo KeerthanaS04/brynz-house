@@ -64,6 +64,17 @@ def summarize(run_dir):
         'ceiling heights (m, coverage)': ', '.join(
             f"{r['ceiling']['height_m']:.2f} ({r['ceiling']['coverage']:.0%})" for r in m.get('rooms') or []
             if r['ceiling'].get('height_m') is not None) or None,
+        'rgb: video pairing (exact)': (f"{_get(m, 'rgb_alignment.video_pairing.mapping')} "
+                                       f"({_get(m, 'rgb_alignment.video_pairing.best_is_exact')})"
+                                       if _get(m, 'rgb_alignment.video_pairing') else None),
+        'rgb: frames checked / median shift (depth px)': (
+            f"{_get(m, 'rgb_alignment.frames')} / {_get(m, 'rgb_alignment.median_shift_depth_px')}"
+            if _get(m, 'rgb_alignment.frames') else None),
+        'rgb: quadrant deviation (depth px) / status': (
+            f"{_fmt(_get(m, 'rgb_alignment.quadrant_max_deviation_depth_px'))} / "
+            f"{_get(m, 'rgb_alignment.status') or _get(m, 'rgb_alignment.spatially_aligned')}"
+            if _get(m, 'rgb_alignment.frames') else None),
+        'rgb: paired frame best (fraction of frames)': _get(m, 'rgb_alignment.temporal_paired_frame_best_fraction'),
         'drift correction decision': _get(m, 'drift.decision'),
         'fused voxels raw / corrected (fewer = sharper)': (
             f"{_get(m, 'drift.ablation.fused_voxels.raw')} / {_get(m, 'drift.ablation.fused_voxels.corrected')}"

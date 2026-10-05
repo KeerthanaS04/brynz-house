@@ -17,6 +17,26 @@ gravity:
   imu_stride: 5
   max_spread_deg: 10.0
 
+rgb:                           # calibration/rgb_alignment.py: depth vs RGB alignment and frame pairing (B-07, B-15)
+  enabled: true
+  frame_stride: 3
+  samples: 24                  # low-motion frames checked, spread over the capture
+  calm_percentile: 30          # frames in the lowest 30% of rotation and translation between neighbours
+  work_scale: 2                # comparison at 2x depth resolution (512x384)
+  confidence_min: 1
+  edge_percentile: 96          # depth edges: strongest 4% of log-depth gradients...
+  edge_min_log_jump: 0.05      # ...and at least a ~5% relative depth jump
+  min_edge_pixels: 200
+  max_shift_px: 3.0            # search range, depth pixels
+  shift_step_px: 0.25
+  aligned_max_shift_px: 0.5    # aligned if median shift <= 0.5 depth px (~0.13 deg)...
+  quadrant_max_spread_px: 0.5  # ...and image quadrants agree (no scale/rotation error)
+  max_correctable_shift_px: 2.0  # larger consistent offsets are treated as a calibration problem
+  temporal_samples: 24
+  temporal_motion_percentiles: [60, 90]  # moderate rotation: neighbours differ, little motion blur
+  temporal_min_fraction: 0.5   # paired video frame should align best in at least half the frames
+  preview_frames: 4
+
 drift:                         # registration/pose_graph.py (default) or registration/drift.py
   enabled: true
   method: pose_graph           # pose_graph | keyframe_to_map (superseded: lost to device poses, reports/drift)

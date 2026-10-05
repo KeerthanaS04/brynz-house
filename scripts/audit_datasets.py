@@ -39,6 +39,8 @@ import pandas as pd
 import PIL
 from PIL import Image
 
+from property_capture.ingestion.video import align_video_to_odometry
+
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / 'data' / 'raw'
 DEFAULT_OUT = ROOT / 'reports' / 'data_audit'
@@ -270,39 +272,6 @@ def scan_video(mp4, sample_idx):
     if len(pts) > 1:
         info['frame_pts_as_reported_by_opencv'] = ts_stats(pts)
     return info, thumbs, pts
-
-
-def align_video_to_odometry(pts, t_odo, max_offsets=50):
-    """Match the dropped-frame gap pattern in video PTS against odometry timestamps.
-
-    Both streams are quantized to multiples of the odometry median dt; the
-    offset k where video frame i lines up with odometry frame i + k is the
-    one whose gap sequences agree. Only end offsets are searched, so an
-    interior drop shows up as mismatches at every offset.
-    """
-    pts, t_odo = np.asarray(pts, float), np.asarray(t_odo, float)
-    n_v, n_o = len(pts), len(t_odo)
-    if n_v < 3 or n_o < n_v:
-        return None
-    unit = float(np.median(np.diff(t_odo)))
-    qv = np.rint(np.diff(pts) / unit).astype(int)
-    qo = np.rint(np.diff(t_odo) / unit).astype(int)
-    cands = []
-    for k in range(min(n_o - n_v, max_offsets) + 1):
-        resid = (pts - pts[0]) - (t_odo[k:k + n_v] - t_odo[k])
-        cands.append({'odometry_offset': k,
-                      'gap_pattern_mismatches': int((qo[k:k + n_v - 1] != qv).sum()),
-                      'max_abs_time_residual_s': float(np.abs(resid).max())})
-    best = min(cands, key=lambda c: c['gap_pattern_mismatches'])
-    return {
-        'method': 'compare video PTS gaps with odometry timestamp gaps, both quantized to the odometry median dt',
-        'video_frames': n_v, 'odometry_frames': n_o,
-        'candidates': cands,
-        'best_offset': best['odometry_offset'],
-        'best_is_exact': best['gap_pattern_mismatches'] == 0,
-        'best_is_unique': sum(c['gap_pattern_mismatches'] == best['gap_pattern_mismatches'] for c in cands) == 1,
-        'mapping': f"video frame i = odometry/depth frame i + {best['odometry_offset']}",
-    }
 
 
 # ---- odometry / imu ----

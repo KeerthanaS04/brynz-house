@@ -16,6 +16,8 @@ import numpy as np
 import yaml
 
 from .calibration.gravity import estimate_gravity
+from .calibration.rgb_alignment import check_alignment, render_previews
+from .ingestion.video import align_video_to_odometry
 from .evaluation.gates import gate_results
 from .ingestion.rgbd import load_capture
 from .reconstruction.fusion import fuse
@@ -155,6 +157,38 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
     stage('gravity', t0)
 
     axes = conv['selected']['camera_axes']
+    rgb = {'enabled': bool(cfg['rgb']['enabled'])}
+    if rgb['enabled']:
+        t0 = time.time()
+        rcfg = cfg['rgb']
+        summary, details, previews = check_alignment(
+            cap, T, list(range(0, len(cap), rcfg['frame_stride'])), cap.root / 'rgb.mp4',
+            align_video_to_odometry, rcfg, cfg['depth'])
+        rgb.update(summary)
+        _dump(out / 'intermediates' / 'rgb_alignment.json', {'summary': summary, **details})
+        render_previews(out / 'rgb_alignment.png', previews)
+        pairing = summary.get('video_pairing')
+        log.info('rgb: pairing %s (exact %s); %d frames, median shift %s depth px, quadrant deviation %s, '
+                 'paired frame best in %s of frames', pairing and pairing['mapping'], pairing and pairing['best_is_exact'],
+                 summary.get('frames', 0), summary.get('median_shift_depth_px'),
+                 summary.get('quadrant_max_deviation_depth_px'), summary.get('temporal_paired_frame_best_fraction'))
+        if not pairing or not (pairing['best_is_exact'] and pairing['best_is_unique']):
+            warnings.append({'code': 'VIDEO_PAIRING_UNCERTAIN',
+                             'message': 'video-to-depth frame pairing not pinned down by the gap pattern'})
+        if summary.get('frames', 0) and summary['status'] == 'inconsistent':
+            warnings.append({'code': 'RGB_DEPTH_MISALIGNED',
+                             'message': f"depth edges sit {summary['median_shift_depth_px']} depth px from RGB edges "
+                                        f"and image quadrants disagree by {summary['quadrant_max_deviation_depth_px']} px"})
+        elif summary.get('frames', 0) and summary['status'] == 'constant_offset':
+            warnings.append({'code': 'RGB_DEPTH_OFFSET',
+                             'message': f"constant depth-to-RGB offset {np.round(summary['depth_to_rgb_offset_px'], 2)} "
+                                        'depth px; apply when projecting between depth and RGB'})
+        frac = summary.get('temporal_paired_frame_best_fraction')
+        if frac is not None and frac < rcfg['temporal_min_fraction']:
+            warnings.append({'code': 'VIDEO_PAIRING_NOT_CONFIRMED',
+                             'message': f'paired video frame aligns best in only {frac:.0%} of checked frames'})
+        stage('rgb_alignment', t0)
+
     T_raw = T
     dcfg_drift = cfg['drift']
     drift = {'enabled': bool(dcfg_drift['enabled'])}
@@ -411,6 +445,7 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                   for r in plan['rooms'] for w in r['walls']],
         'half_split_consistency': consistency,
         'drift': drift,
+        'rgb_alignment': rgb,
         'accuracy': 'not_evaluable: no reference measurements',
     }
     _dump(out / 'metrics.json', metrics)
