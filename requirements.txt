@@ -5,3 +5,8 @@ opencv-python>=4.10
 pyyaml>=6.0
 shapely>=2.0
 pycolmap>=4.0
+# video tier depth network (modalities/video_depth.py). GPU build:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+torch>=2.6
+transformers>=4.45
+huggingface_hub>=0.25

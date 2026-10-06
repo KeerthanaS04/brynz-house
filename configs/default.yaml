@@ -62,6 +62,53 @@ video:                         # modalities/video_sfm.py: video tier (RGB video 
     abs_pose_min_num_inliers: 15     # [30] matches needed to add a camera
     abs_pose_min_inlier_ratio: 0.15  # [0.25]
 
+video_depth:                   # modalities/video_depth.py + video_pipeline.py: video tier step 2 (floor plan)
+  model_dir: depth-anything-v2-metric-indoor-small  # under weights/, fetched by scripts/fetch_weights.py (B-24)
+  device: auto                 # auto (GPU if available) | cpu | cuda
+  depth_width: 256             # network depth stored at 256 x 192, the LiDAR depth resolution
+  edge_max_rel_jump: 0.05      # confidence 0 where depth jumps > 5% between neighbouring pixels (blurred edges)
+  min_m: 0.2                   # depth used for scale samples and links
+  max_m: 5.0
+  scale_min_points: 20         # SfM points with depth needed for a frame's scale sample
+  run_max_gap_frames: 2        # a piece's frames further apart than this (selected frames) start a new run
+  run_min_frames: 3
+  run_check_max_m: 0.05        # run rejected if its frame-to-frame motion differs from depth links by more (median)
+  run_check_max_deg: 2.0
+  # first run (single_room): 800 px, 4000 features, ratio 0.75, 40 inliers -> 82 of 193 links failed,
+  # median 19 matches (blurred fast turns); successful links had 88% inliers
+  match_width: 1200            # frames downscaled to this width for links
+  sift_features: 8000
+  ratio_test: 0.8
+  # second run (these settings): 73 of 201 links failed; main component 29 frames, scale 3% off vs device,
+  # corrected depth 1.005 x LiDAR (p10-p90 0.98-1.06). Failures: blurred fast turns, few matches.
+  # Rounds 3-4 loosened links (6 px, 25% inliers, reverse links, bridge frames from the blurred gaps):
+  # more frames joined (95-131) but wrong links got in and the scale went 14-45% off (reports/video_depth).
+  # The looser options stay available but are off.
+  pnp_reprojection_px: 3.0     # at match_width (round 3-4: 6.0)
+  pnp_min_inliers: 20
+  pnp_min_inlier_ratio: 0.5    # (round 3-4: 0.25)
+  link_reverse: false          # true: if a cannot place b, place a from b's depth and invert
+  link_max_scale_change: 2.0   # neighbouring frames' depth scales differing more than 2x: link rejected
+  extra_links: 2               # each linked frame also linked from the 2 frames before its parent (checks links)
+  # third run: chaining scale link by link let 2% errors per link (p90 9%, one at 3.8e14) multiply over
+  # ~300 links (scale 45% off). Scales are now solved together in log scale:
+  scale_sigma_link: 0.03       # link scale error (single_room vs LiDAR: median 2.2%)
+  scale_sigma_run: 0.01        # frames of one SfM run share its scale
+  scale_sigma_prior: 0.25      # network scale per frame (single_room: 7% median change, p90 21%)
+  scale_robust_c: 2.0          # Cauchy weight: a link 2 sigma off counts half, 6 sigma off a tenth
+  scale_irls_iterations: 5
+  # step 1 drops blurred frames, so fast turns left gaps of up to 3.7 s (single_room: 200 -> 271, 2.4 s, 133 deg)
+  bridge_max_gap_frames: null  # null: off. 10 (round 3-4): gaps longer than this (video frames) get bridge frames...
+  bridge_step_frames: 3        # ...every 3rd video frame, blurred or not, used for links only
+  max_bridge_frames: 6         # failed links in a row before the trajectory starts a new component
+  up_frame_stride: 2
+  up_max_angle_deg: 20.0       # floor plane searched within this of the camera-axis up...
+  up_refine_angle_deg: 5.0     # ...then again within this of the first floor normal
+  up_ransac_m: 0.03
+  shared_overrides:            # shared stages tuned for 60 frames/s depth; video frames are ~6/s
+    fusion.frame_stride: 1
+    openings.frame_stride: 1
+
 openings:                      # rooms/openings.py: doors, windows and other openings from camera rays
   enabled: true
   frame_stride: 6
