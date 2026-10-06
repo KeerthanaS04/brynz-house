@@ -69,10 +69,22 @@ def _refine_up(vf, T, up0, cfg, vcfg, rng):
     return up, info
 
 
+def run_video_tier(video_path, output_dir, cfg, gates_path):
+    """One command for a video: step 1 (frames + SfM) into <output_dir>/video_sfm, then the plan
+    into <output_dir>, laid out like a LiDAR run (property.json, floorplan.png, ...)."""
+    from .modalities.video_sfm import run_video
+    out = Path(output_dir)
+    if out.exists() and any(out.iterdir()):
+        raise FileExistsError(f'{out} exists and is not empty; runs never overwrite')
+    run_video(video_path, out / 'video_sfm', cfg['video'])
+    return run_video_plan(out / 'video_sfm', out, cfg, gates_path)
+
+
 def run_video_plan(video_run, output_dir, cfg, gates_path):
     t_start = time.time()
     video_run, out = Path(video_run), Path(output_dir)
-    if out.exists() and any(out.iterdir()):
+    # the step-1 run may live inside the output folder (run_video_tier); nothing else may
+    if out.exists() and any(p.resolve() != video_run.resolve() for p in out.iterdir()):
         raise FileExistsError(f'{out} exists and is not empty; runs never overwrite')
     (out / 'intermediates').mkdir(parents=True, exist_ok=True)
     setup_logging(out)

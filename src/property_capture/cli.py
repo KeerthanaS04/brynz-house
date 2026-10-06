@@ -15,8 +15,11 @@ def main(argv=None):
     a = sub.add_parser('audit', help='audit supplied capture ZIPs (scripts/audit_datasets.py)')
     a.add_argument('rest', nargs=argparse.REMAINDER, help='arguments passed to the audit script')
 
-    r = sub.add_parser('run', help='run the RGB-D baseline on one capture')
-    r.add_argument('--input', required=True, help='capture ZIP or extracted capture directory')
+    r = sub.add_parser('run', help='floor plan from one capture (tier detected from the input)')
+    r.add_argument('--input', required=True,
+                   help='LiDAR capture ZIP or folder, video file, or folder of room photos')
+    r.add_argument('--tier', default='auto', choices=('auto', 'lidar', 'video', 'photo'),
+                   help='auto: from the input layout; video on a LiDAR capture uses only its rgb.mp4')
     r.add_argument('--config', default=str(REPO_ROOT / 'configs' / 'default.yaml'))
     r.add_argument('--gates', default=str(REPO_ROOT / 'configs' / 'evaluation' / 'gates.yaml'))
     r.add_argument('--output', help='fresh run directory (default outputs/run_<UTC time>)')
@@ -118,14 +121,40 @@ def main(argv=None):
         print(f'evaluation written to {out}')
         return 1 if args.strict and any(g['status'] == 'fail' for g in results.values()) else 0
 
-    from .pipeline import run
+    from .tiers import UnknownInput, detect_tier, find_video
+    try:
+        tier = detect_tier(args.input) if args.tier == 'auto' else args.tier
+    except (FileNotFoundError, UnknownInput) as e:
+        print(f'cannot run: {e}', file=sys.stderr)
+        return 2
     output = args.output or str(REPO_ROOT / 'outputs' /
                                 f"run_{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}")
+    print(f'input tier: {tier}' + (' (detected)' if args.tier == 'auto' else ''))
+    if tier == 'photo':
+        print('the photo tier is not implemented yet (docs/requirements/traceability.csv REQ-01: no photo data '
+              'supplied); no output written', file=sys.stderr)
+        return 2
     try:
-        return run(args.input, args.config, output, args.gates, overrides=args.set)
+        if tier == 'video':
+            import yaml
+
+            from .plan_outputs import apply_overrides
+            from .video_pipeline import run_video_tier
+            src = Path(args.input)
+            if src.suffix.lower() == '.zip':                  # a LiDAR capture ZIP: use only its video
+                from .ingestion.rgbd import resolve_capture_dir
+                src = resolve_capture_dir(src, REPO_ROOT / 'data' / 'raw')
+            with open(args.config, encoding='utf-8') as f:
+                cfg = apply_overrides(yaml.safe_load(f), args.set)
+            run_video_tier(find_video(src), output, cfg, args.gates)
+        else:
+            from .pipeline import run
+            run(args.input, args.config, output, args.gates, overrides=args.set)
     except Exception as e:
         print(f'pipeline failed: {e}', file=sys.stderr)
         raise
+    print(f'{tier} run written to {output} (floorplan.png, property.json)')
+    return 0
 
 
 if __name__ == '__main__':

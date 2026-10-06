@@ -6,7 +6,8 @@ piece metric scale and dense geometry, tries to join the pieces, and runs the Li
 stages on the result.
 
 **Result: the video tier produces a dimensioned plan, but only of the largest piece of the walk.**
-That piece's scale is right to within 4% on two captures and off by 21% on the third. The plan
+That piece's scale is right to within 4% on floor_only (in both runs), off by 21% on with_ceiling, and
+on single_room 3.6% in one run but −17% in a repeat run (step-1 SfM is not deterministic). The plan
 covers 7–22% of the property's area (as measured by the LiDAR tier). Joining the pieces failed.
 Making it work would need either a recapture that follows the protocol (not planned) or a much
 larger reconstruction model than this laptop's 4 GB GPU can run.
@@ -78,10 +79,27 @@ The network gets each frame's **shape** right but not its overall **scale**. Tha
 | **Plan area: video vs LiDAR** | **4.96 vs 22.70 m² (22%)** | **9.24 vs 53.70 m² (17%)** | **4.79 vs 64.00 m² (7%)** |
 | Rooms: video vs LiDAR | 1 vs 3 | 1 vs 5 | 1 vs 4 |
 
+## Repeat run (`outputs/repro_full`, `scripts/reproduce.py`)
+
+The whole video tier was rerun from the raw ZIPs at the same settings.
+
+| | single_room | floor_only | with_ceiling |
+|---|---|---|---|
+| SfM pieces (step 1) | **7** (was 6) | 9 (same) | 17 (same) |
+| Main part frames | **36** (was 29) | 60 | 29 |
+| Main part scale error | **−17%** (was +3.6%) | 3.4% (was 3.3%) | 21% (was 21%) |
+| Main part rigid fit error | **11.6 cm** (was 2.4 cm) | 6.1 cm | 22 cm |
+| Corrected depth / LiDAR | **0.78** (was 1.01) | 1.11 | 1.20 |
+| Plan area / LiDAR plan | 22% | 17% | 7% |
+
+- **Step 1 is not deterministic.** On the same 170 single_room frames, COLMAP's incremental mapping gave 7 pieces instead of 6 despite a fixed random seed (it runs multi-threaded). The plan then came from a different piece, and that piece's network scale is 17% off.
+- **So the 3.6% single_room scale in the first run was partly luck.** Only floor_only gave a scale within 4% on both runs.
+- Taken together, the network gives about 3% on some pieces and 17–21% on others, and nothing in the video alone tells which.
+
 ## Findings
 
 - **No link ever joined another part to the main part.** In every capture the plan comes from one SfM run, i.e. one stretch of walking between two fast turns.
-- **The network's metric scale holds for some stretches and not others.** On two captures the main run's scale is within about 3–4% with no measurement. On with_ceiling it is 21% off, and other runs range from −33% to +88%. Nothing available from the video alone tells which runs are right. The ±3% video wall-length gate therefore needs a reference measurement.
+- **The network's metric scale holds for some stretches and not others.** The main run's scale is within about 3–4% with no measurement on floor_only (twice) and on single_room once. It is 17% off on single_room's repeat run and 21% off on with_ceiling, and other runs range from −33% to +88%. Nothing available from the video alone tells which runs are right. The ±3% video wall-length gate therefore needs a reference measurement.
 - **Wall lengths cannot be compared with the LiDAR plan.** The video plan covers one partial room, so its edges do not correspond to the LiDAR plan's walls. The up direction was never refined on the floor plane, because the main parts look in too few directions, so the plan's frame may be tilted by up to about 20°.
 - **The cause is in the capture, not the processing.** Fast turns on the spot blur the frames and leave no parallax. Capture-protocol step 12 ("turn while you walk, never on the spot") targets exactly this. A protocol-compliant recording would test it, but none is planned, so this remains untested.
 
