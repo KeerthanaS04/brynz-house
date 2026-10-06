@@ -31,6 +31,9 @@ python -m property_capture audit
 python -m property_capture run --input single_room.zip
 python -m property_capture run --input data/raw/single_room/c00a170fe1 --output outputs/run_my_test
 
+# Score runs against laser references (docs/benchmark_protocol.md) -> <run>/evaluation_<id>/
+python -m property_capture evaluate --references data/references.csv --run scan-01=outputs/run_my_test
+
 # Unit tests
 python -m pytest -q
 ```

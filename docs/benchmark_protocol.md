@@ -44,6 +44,25 @@ The pipeline names rooms, walls and openings itself (`room-02`, `room-02-wall-10
 
 This manual link is deliberate: automatic matching could flatter the results.
 
+## Scoring
+
+Once the reference CSV has `pipeline_id`s filled in, run:
+
+```powershell
+python -m property_capture evaluate --references data/references.csv --run scan-01=outputs/<run of scan-01> --run scan-02=outputs/<run of scan-02>
+```
+
+This takes one `--run` per `capture_id` in the CSV. It writes a fresh `evaluation_<time>/` folder inside the first run:
+- `per_measurement.csv`: every reference with its pipeline value, error and status
+- `gate_results.json`: the result of every gate
+- `evaluation.md`: a summary
+
+Add `--strict` to exit with code 1 if any gate fails.
+
+Where the PDF's wording is ambiguous, both readings are scored, and the gate reports `ambiguous` if they disagree:
+- what counts in the opening gate's denominator (assumptions.md A-03)
+- whether repeatability means "1 cm or 0.5%" either way (A-04)
+
 ## Repeat capture (repeatability gate)
 
 - Scan the chosen room twice, as separate recordings, starting from a different doorway.
