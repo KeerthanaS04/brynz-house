@@ -1,0 +1,6 @@
+capture_id,room_label,item_label,quantity,value_m,reading,instrument,pipeline_id,notes
+EXAMPLE-scan-01,room-A,wall-north,wall_length,3.412,1,laser model,,corner to corner at 1 m height
+EXAMPLE-scan-01,room-A,wall-north,wall_length,3.414,2,laser model,,
+EXAMPLE-scan-01,room-A,ceiling-centre,ceiling_height,2.512,1,laser model,,room centre
+EXAMPLE-scan-01,room-A,door-1,opening_width,0.823,1,tape,,jamb to jamb at 1 m height
+EXAMPLE-scan-01,room-A,door-1,opening_height,2.041,1,tape,,

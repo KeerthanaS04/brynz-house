@@ -1,7 +1,15 @@
 # Property capture → dimensioned floor plan
 
 Engineering contract: `CLAUDE_updated.md`. Requirement status: `docs/requirements/traceability.csv`.
-Current state: Phase 0 (requirements, data audit, RGB-D baseline). See `reports/baseline/phase0_baseline.md`.
+Current state: LiDAR tier implemented (rooms, walls, openings, ceilings, drift accountability); photo and video
+tiers not yet implemented. Results per feature: `reports/*/README.md`.
+
+| Document | For |
+|---|---|
+| `docs/capture_protocol.md` | one-page capture instructions for a non-engineer (PDF Route 2) |
+| `docs/device_matrix.md` | which tier runs on which iPhone, and what accuracy each honestly delivers |
+| `docs/benchmark_protocol.md` | benchmark set and laser reference measurements (template in `docs/templates/`) |
+| `docs/requirements/assumptions.md` | every assumption, observation and open question |
 
 ## Setup (Windows PowerShell)
 
