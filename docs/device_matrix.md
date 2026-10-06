@@ -24,7 +24,8 @@ below are internal consistency checks, not accuracy.
 | Floor plane flatness | < 1 cm RMS, < 0.5° tilt | `reports/baseline` |
 | Ceiling height precision (where measurable) | standard error 0.5–1.1 mm (3 of 4 rooms in with_ceiling) | `reports/ceiling` |
 | Opening width, same doorway from two rooms (both jambs seen) | 0.7 cm | `reports/opening_widths` |
-| Shared wall thickness | 6–14 cm where faces are parallel | `reports/shared_walls`, `reports/wall_alignment` |
+| Shared wall thickness | 4–13 cm where faces are parallel (6–14 cm before the wall-offset fix) | `reports/shared_walls`, `reports/wall_alignment`, `reports/adversarial` |
+| Synthetic box room (known geometry) | area 12.00 m², walls within 2 cm, wall positions within 0.6 cm, ceiling 2.50 ± 0.01 m | `reports/adversarial` |
 
 What these do **not** show: absolute scale error, wall-length error, ceiling height error, or opening width error against a laser. These need the benchmark captures (`docs/benchmark_protocol.md`).
 

@@ -6,6 +6,8 @@ depth:
   min_m: 0.2
   max_m: 5.0
   confidence_min: 1          # PROPOSED B-04: drop confidence 0 only
+  min_valid_fraction: 0.05   # below this share of usable depth pixels the run stops with the reason
+  warn_valid_fraction: 0.4   # below this a DEPTH_SPARSE warning is added
 
 pose_convention:
   pair_gap_frames: 15        # ~0.25-0.33 s apart at 45-60 Hz
@@ -252,6 +254,7 @@ floorplan:
     max_wall_thickness_m: 0.30 # rooms within this distance across a wall share it (both wall faces are detected)
   walls:
     cell_m: 0.04
+    refine_offsets: true      # move wall lines from cell centres onto their points (synthetic box: 2 cm shift)
     height_bin_m: 0.10
     tall_fraction: 0.5        # cell must have points in >= 50% of the wall band's height bins
     ransac_threshold_m: 0.03
@@ -282,3 +285,4 @@ consistency:
 
 checks:
   camera_height_range_m: [0.3, 2.2]   # handheld capture: plausible camera height above floor
+  jump_threshold_m: 0.10              # pose step between consecutive frames that counts as a tracking jump (B-19)

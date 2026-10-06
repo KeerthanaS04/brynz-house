@@ -14,8 +14,8 @@ from .ceiling import assess_ceiling, level_stats
 from .segmentation import overlap_area, resolve_overlaps, segment_rooms, to_m
 from .shared_walls import pair_shared_walls
 from .wall_alignment import align_shared_walls
-from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, repair_polygon, snap_polygon,
-                    tall_cells)
+from .walls import (detect_wall_segments, group_collinear, is_simple_polygon, refine_offsets, repair_polygon,
+                    snap_polygon, tall_cells)
 
 
 def horizontal_basis(up):
@@ -200,6 +200,8 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
         if room is not None:
             segments = detect_wall_segments(tall2d, wcfg, rng)
             walls = group_collinear(segments, wcfg)
+            if wcfg['refine_offsets']:
+                refine_offsets(walls, band2d, wcfg)
             snapped, snap_info = snap_outline(room['contour_m'], walls, wcfg)
             wall_detection.update(snap_info)
             wall_detection['sliver_opening'] = room['opening']
@@ -266,9 +268,15 @@ def build_floorplan(points, up, camera_positions, pcfg, fcfg, rng):
             contour = to_m(max(cs, key=cv2.contourArea)[:, 0, :], grid)
             snapped, info = snap_outline(contour, walls, wcfg)
             poly = snapped['polygon'] if snapped is not None else _simplified(contour, fcfg)
+            if len(poly) < 3 or abs(polygon_area(np.asarray(poly, float))) < 1e-6:
+                # a region too small or thin to outline (seen with few frames): not a room
+                segmentation['degenerate_regions_dropped'] = segmentation.get('degenerate_regions_dropped', 0) + 1
+                continue
             rooms.append({**r, **describe_polygon(poly, tall2d, fcfg),
                           'outline_method': 'wall_snap' if snapped is not None else 'occupancy_fallback',
                           'outline_info': info, 'mask': rmask, 'ceiling': ceiling_for(rmask)})
+        if not rooms:
+            return {'status': 'failed', 'reason': 'room segmentation left no region large enough to outline'}
         # Rooms are snapped independently, so outlines can reach into a neighbour; clip them so
         # no two room interiors overlap (PDF stitch gate: no room overlaps).
         segmentation['overlap_before_m2'] = overlap_area([r['polygon'] for r in rooms])

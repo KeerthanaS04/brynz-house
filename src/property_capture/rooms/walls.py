@@ -105,6 +105,26 @@ def group_collinear(segments, cfg):
     return walls
 
 
+def refine_offsets(walls, band2d, cfg):
+    """Move each wall line onto its own points.
+
+    Lines are fitted to tall-cell centres, which leaves a wall anywhere within half a cell
+    (cell_m / 2 = 2 cm) of its surface; a synthetic box came out shifted by exactly that.
+    Each line is moved along its normal by the median offset of the wall-band points within one
+    cell of it, inside its extent."""
+    r = cfg['cell_m']
+    for w in walls:
+        rel = band2d - w['centre']
+        d, s = rel @ w['normal'], rel @ w['direction']
+        sel = (np.abs(d) <= r) & (s >= w['extent'][0]) & (s <= w['extent'][1])
+        w['offset_refinement_m'] = None
+        if sel.sum() >= cfg['min_segment_points']:
+            shift = float(np.median(d[sel]))
+            w['centre'] = w['centre'] + shift * w['normal']
+            w['offset_refinement_m'] = shift
+    return walls
+
+
 def _runs(label):
     n = len(label)
     b = np.flatnonzero(label != np.roll(label, 1))

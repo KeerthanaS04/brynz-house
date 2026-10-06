@@ -298,6 +298,9 @@ def write_outputs(out, cap, geo, consistency, cfg, prov, warnings, unobservable,
         'software_commit': prov['git']['commit'], 'software_dirty': prov['git']['dirty'],
         'config_hash': prov['config_sha256'],
         'coordinate_frame': {'description': frame_description,
+                             'convention': '2D point (x, y) of a world point P = (P . x_axis_world, P . y_axis_world); '
+                                           'origin_world is a point on the floor plane (floor elevation 0), not the '
+                                           '2D origin',
                              'origin_world': plan['basis']['origin'], 'x_axis_world': plan['basis']['e1'],
                              'y_axis_world': plan['basis']['e2'], 'up_world': plan['basis']['up']},
         'rooms': rooms_out,

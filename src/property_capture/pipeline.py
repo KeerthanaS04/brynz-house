@@ -19,7 +19,7 @@ from .calibration.gravity import estimate_gravity
 from .calibration.rgb_alignment import check_alignment, render_previews
 from .ingestion.video import align_video_to_odometry
 from .evaluation.gates import gate_results
-from .ingestion.rgbd import load_capture
+from .ingestion.rgbd import depth_validity, load_capture
 from .plan_outputs import (apply_overrides, build_geometry, dump, plan_summary, setup_logging,  # noqa: F401
                            split_half_consistency, write_outputs)
 from .reconstruction.fusion import fuse
@@ -70,6 +70,18 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
 
     warnings, unobservable = [], []
     warnings.append({'code': 'DEPTH_UNIT_ASSUMED', 'message': f"depth unit {cfg['depth']['unit_scale_m']} m/count (assumptions.md B-03)"})
+    validity = depth_validity(cap, cfg['depth'])
+    log.info('depth validity: %.0f%% of sampled pixels usable, median non-zero depth %.2f m',
+             100 * validity['valid_fraction'], validity['median_nonzero_depth_m'])
+    if validity['valid_fraction'] < cfg['depth']['min_valid_fraction']:
+        raise ValueError(
+            f"only {validity['valid_fraction']:.1%} of sampled depth pixels are usable (confidence >= "
+            f"{cfg['depth']['confidence_min']}, {cfg['depth']['min_m']}-{cfg['depth']['max_m']} m); median non-zero "
+            f"depth {validity['median_nonzero_depth_m']:.2f} m with unit {cfg['depth']['unit_scale_m']} m/count. "
+            'Depth is missing, all low confidence, or in other units (assumptions.md B-03)')
+    if validity['valid_fraction'] < cfg['depth']['warn_valid_fraction']:
+        warnings.append({'code': 'DEPTH_SPARSE',
+                         'message': f"only {validity['valid_fraction']:.0%} of sampled depth pixels are usable"})
 
     t0 = time.time()
     conv, T = resolve_conventions(cap, cfg['pose_convention'], cfg['depth'])
@@ -81,6 +93,20 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         warnings.append({'code': 'DEPTH_SCALE_MISMATCH',
                          'message': f"depth scale {conv['depth_scale_best']} fits odometry better than 1.0"})
     stage('pose_conventions', t0)
+
+    steps = np.linalg.norm(np.diff(T[:, :3, 3], axis=0), axis=1)
+    jumps = np.flatnonzero(steps > cfg['checks']['jump_threshold_m']) + 1
+    if len(jumps):
+        # a relocalization or tracking failure moves the pose without the camera moving: geometry
+        # from either side of it is duplicated or shifted (assumptions.md B-19)
+        warnings.append({'code': 'TRACKING_JUMP',
+                         'message': f'{len(jumps)} pose step(s) above {cfg["checks"]["jump_threshold_m"]} m between '
+                                    f'consecutive frames, largest {steps.max():.2f} m, into frame(s) '
+                                    f'{[int(cap.frames[j]) for j in jumps[:10]]}; geometry may be duplicated or '
+                                    'shifted there',
+                         'frames': [int(cap.frames[j]) for j in jumps]})
+        log.info('tracking jumps into frames %s (largest %.2f m)', [int(cap.frames[j]) for j in jumps[:10]],
+                 steps.max())
 
     t0 = time.time()
     grav = estimate_gravity(cap, T, cfg['gravity'])
@@ -219,7 +245,7 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                          drift_ablation='ablation' in drift, drift_note=drift.get('decision'))
     write_outputs(
         out, cap, geo, consistency, cfg, prov, warnings, unobservable, gates, input_tier='lidar',
-        frame_description='2D floor frame: origin/axes below are in odometry world coordinates',
+        frame_description='2D floor frame; axes and floor point below are in odometry world coordinates',
         pose_label='drift-corrected poses' if drift['applied'] else 'device poses',
         metrics_head={
             'pose_conventions': {k: conv[k] for k in ('selected', 'selected_median_abs_residual_m', 'runner_up',

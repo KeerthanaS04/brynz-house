@@ -1,10 +1,11 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from property_capture.rooms.floorplan import extract_room, polygon_area
-from property_capture.rooms.walls import (detect_wall_segments, group_collinear, is_simple_polygon,
+from property_capture.rooms.walls import (detect_wall_segments, group_collinear, is_simple_polygon, refine_offsets,
                                           repair_polygon, snap_polygon, tall_cells)
 
 with open(Path(__file__).resolve().parents[2] / 'configs' / 'default.yaml', encoding='utf-8') as f:
@@ -133,3 +134,13 @@ def test_is_simple_polygon():
     bowtie = np.array([[0, 0], [1, 1], [1, 0], [0, 1]], float)
     assert is_simple_polygon(square)
     assert not is_simple_polygon(bowtie)
+
+
+def test_refine_offsets_moves_line_from_cell_centre_onto_points():
+    rng = np.random.default_rng(0)
+    # wall surface at y = 0.000 (a cell boundary): tall-cell centres sit at y = -0.02 or +0.02
+    pts = np.column_stack([rng.uniform(0, 3, 600), rng.normal(0, 0.003, 600)])
+    walls = [{'centre': np.array([1.5, -0.02]), 'direction': np.array([1.0, 0.0]), 'normal': np.array([0.0, 1.0]),
+              'extent': [-1.5, 1.5]}]
+    refine_offsets(walls, pts, WCFG)
+    assert abs(walls[0]['centre'][1]) < 0.002 and walls[0]['offset_refinement_m'] == pytest.approx(0.02, abs=0.002)

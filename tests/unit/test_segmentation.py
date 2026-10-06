@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from property_capture.rooms.segmentation import overlap_area, resolve_overlaps, segment_rooms, to_m
@@ -99,3 +100,8 @@ def test_room_without_camera_is_not_visited():
     by_x = {round(float(np.mean(np.nonzero(labels == r['label'])[1]))): r for r in rooms}
     left, right = by_x[min(by_x)], by_x[max(by_x)]
     assert left['visited'] and not right['visited']
+
+
+def test_overlap_area_tolerates_degenerate_polygons():
+    square = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], float)
+    assert overlap_area([square, np.array([[0.5, 0.5], [2, 2]]), square + 0.5]) == pytest.approx(0.25)
