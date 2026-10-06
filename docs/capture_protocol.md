@@ -32,7 +32,7 @@ One recording covers the whole property.
 
 ## 4. Video (any iPhone 15 or newer, Camera app)
 
-12. Record **one video** walking the same route as the 3D scan (steps 6–9), phone upright, slow and steady.
+12. Record **one video** walking the same route as the 3D scan (steps 6–9), phone upright, slow and steady. **Turn while you walk, never on the spot:** to look at the next wall, take a few steps while turning.
 
 ## Avoid
 
@@ -57,5 +57,6 @@ One recording covers the whole property.
 - *Steps 7 ceiling and 9 finish:* ceiling height is only reported where enough ceiling was seen (`reports/ceiling`), and revisits give drift evidence (`reports/drift`).
 - *Step 7 doors and windows:* an opening width is only measured where both jambs were seen (`reports/opening_widths`).
 - *Steps 7 and 8, walking through doorways:* this is what links rooms (`reports/room_segmentation`).
+- *Step 12, turning while walking:* in video, turning on the spot leaves no parallax, and the reconstruction breaks into pieces with unrelated scales at exactly those moments (`reports/video_tier`).
 - *Step 7, not pointing at the floor:* in `single_scan_floor_only` the tops of doorways were never seen, so doors could not be classified (`reports/openings`).
-- *Not yet verified:* the app name (Stray Scanner) is inferred from the supplied files' format (assumptions.md B-20), and its button labels and export menu must be checked on a real phone before the defense, because the page is followed literally. Only the 3D scan is processed by the pipeline today; photo and video tiers are not implemented yet (`docs/device_matrix.md`).*
+- *Not yet verified:* the app name (Stray Scanner) is inferred from the supplied files' format (assumptions.md B-20), and its button labels and export menu must be checked on a real phone before the defense, because the page is followed literally. Only the 3D scan produces a floor plan today; the video tier recovers camera motion only, and the photo tier is not implemented yet (`docs/device_matrix.md`).*
