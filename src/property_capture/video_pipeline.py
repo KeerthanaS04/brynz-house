@@ -107,7 +107,8 @@ def run_video_plan(video_run, output_dir, cfg, gates_path):
 
     pieces = load_pieces(video_run / 'colmap' / 'sparse')
     if not pieces:
-        raise RuntimeError(f'{video_run}: no SfM models')
+        raise RuntimeError(f'{video_run}: structure from motion reconstructed nothing; the video has too little '
+                           'texture, sharpness or camera movement (see video_sfm.json)')
     largest = max(pieces, key=lambda p: len(p['poses']))
     K_img = colmap_intrinsics(next(iter(largest['rec'].cameras.values())))
     focals = [float(colmap_intrinsics(next(iter(p['rec'].cameras.values())))[0, 0]) for p in pieces]
@@ -287,7 +288,7 @@ def run_video_plan(video_run, output_dir, cfg, gates_path):
         'links': [{'a': a, 'b': b, **st, 'ok': T_ is not None} for (a, b), (T_, st) in links.items()]})
     write_outputs(
         out, vf, geo, consistency, cfg, prov, warnings, unobservable, gates, input_tier='video',
-        frame_description='2D floor frame: origin/axes below are in the video trajectory frame '
+        frame_description='2D floor frame; axes and floor point below are in the video trajectory frame '
                           '(metres from the depth network, uncalibrated)',
         pose_label='video only: SfM runs + depth links',
         metrics_head={'video': video_metrics},

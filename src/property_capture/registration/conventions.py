@@ -78,7 +78,8 @@ def resolve_conventions(cap, cfg, dcfg):
     ranked = sorted(table, key=key)
     best, second = ranked[0], ranked[1]
     if not np.isfinite(key(best)):
-        raise RuntimeError('no pose convention produced overlapping, consistent depth; cannot continue')
+        raise RuntimeError('no pose convention produced overlapping, consistent depth: poses, intrinsics or depth '
+                           'units are inconsistent with each other (assumptions.md B-03, B-11, B-12)')
     T_best = camera_to_world(cap, best['quaternion_order'], best['pose_direction'])
 
     sweep = []

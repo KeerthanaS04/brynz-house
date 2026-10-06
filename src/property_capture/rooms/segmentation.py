@@ -189,7 +189,7 @@ def segment_rooms(mask, segments, grid, camera2d, cfg):
 
 
 def _shape(poly):
-    return Polygon(poly).buffer(0)
+    return Polygon(poly).buffer(0) if len(poly) >= 3 else Polygon()
 
 
 def overlap_area(polys):

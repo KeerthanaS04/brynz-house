@@ -28,6 +28,19 @@ def _read_csv(path):
     return df
 
 
+def _check_finite(name, ids, df, columns):
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        raise ValueError(f'{name}: missing column(s) {missing}')
+    values = df[list(columns)].apply(pd.to_numeric, errors='coerce').to_numpy(float)
+    bad = ~np.isfinite(values)
+    if bad.any():
+        rows = np.flatnonzero(bad.any(axis=1))
+        cols = [columns[j] for j in np.flatnonzero(bad[rows[0]])]
+        raise ValueError(f'{name}: {len(rows)} row(s) with missing or non-numeric values, first at row '
+                         f'{rows[0]} (frame/index {ids[rows[0]]}), columns {cols}')
+
+
 def _index_pngs(folder):
     out = {}
     for p in folder.glob('*.png'):
@@ -71,6 +84,20 @@ class RGBDCapture:
         return np.array(Image.open(self.confidence_paths[int(self.frames[i])]))
 
 
+def depth_validity(cap, dcfg, samples=24):
+    """Fraction of pixels with usable depth (confidence and range) over evenly spaced frames."""
+    idx = np.linspace(0, len(cap) - 1, min(samples, len(cap))).astype(int)
+    valid, raw = [], []
+    for i in idx:
+        d = cap.load_depth_raw(i).astype(float) * dcfg['unit_scale_m']
+        ok = (cap.load_confidence(i) >= dcfg['confidence_min']) & (d > dcfg['min_m']) & (d < dcfg['max_m'])
+        valid.append(ok.mean())
+        nz = d[d > 0]
+        raw.append(np.median(nz) if len(nz) else 0.0)
+    return {'frames_sampled': len(idx), 'valid_fraction': float(np.mean(valid)),
+            'median_nonzero_depth_m': float(np.median(raw))}
+
+
 def resolve_capture_dir(path, raw_root):
     """Accept a capture directory, its parent, or a ZIP (extracted under raw_root/<zip stem>/)."""
     path = Path(path)
@@ -98,10 +125,23 @@ def load_capture(path, raw_root='data/raw'):
     odo = _read_csv(root / 'odometry.csv')
     imu = _read_csv(root / 'imu.csv')
 
+    _check_finite('odometry.csv', np.arange(len(odo)), odo, ('timestamp', 'frame', 'x', 'y', 'z', 'qx', 'qy', 'qz',
+                                                             'qw', 'fx', 'fy', 'cx', 'cy'))
     frames = odo['frame'].to_numpy(int)
     ts = odo['timestamp'].to_numpy(float)
     if np.any(np.diff(ts) <= 0):
         raise ValueError('odometry timestamps are not strictly increasing')
+    qn = np.linalg.norm(odo[['qx', 'qy', 'qz', 'qw']].to_numpy(float), axis=1)
+    bad = np.flatnonzero(np.abs(qn - 1) > 0.1)
+    if len(bad):
+        raise ValueError(f'odometry.csv: {len(bad)} quaternion(s) far from unit length (norm {qn[bad[0]]:.3g} '
+                         f'at frame {frames[bad[0]]}); poses are unusable')
+    _check_finite('imu.csv', np.arange(len(imu)), imu, ('timestamp', 'a_x', 'a_y', 'a_z',
+                                                        'alpha_x', 'alpha_y', 'alpha_z'))
+    g = np.median(np.linalg.norm(imu[['a_x', 'a_y', 'a_z']].to_numpy(float), axis=1))
+    if not 0.5 < g < 2.0:
+        raise ValueError(f'imu.csv: median acceleration {g:.3g}, expected about 1 (units of g, '
+                         'assumptions.md B-09); m/s2 would give about 9.8')
 
     depth_paths = _index_pngs(root / 'depth')
     conf_paths = _index_pngs(root / 'confidence')
@@ -125,6 +165,14 @@ def load_capture(path, raw_root='data/raw'):
     depth_size = (d0.shape[1], d0.shape[0])
     if not np.isclose(depth_size[0] / rgb_size[0], depth_size[1] / rgb_size[1]):
         raise ValueError(f'depth {depth_size} and RGB {rgb_size} aspect ratios differ; intrinsics scaling invalid')
+    bad = np.flatnonzero((K[:, 0, 0] <= 0) | (K[:, 1, 1] <= 0) | (K[:, 0, 2] <= 0) | (K[:, 0, 2] >= rgb_size[0])
+                         | (K[:, 1, 2] <= 0) | (K[:, 1, 2] >= rgb_size[1]))
+    if len(bad):
+        i = bad[0]
+        raise ValueError(f'odometry.csv: {len(bad)} frame(s) with invalid intrinsics, e.g. frame {frames[i]}: '
+                         f'fx {K[i, 0, 0]:.4g}, fy {K[i, 1, 1]:.4g}, cx {K[i, 0, 2]:.4g}, cy {K[i, 1, 2]:.4g} '
+                         f'for a {rgb_size[0]}x{rgb_size[1]} image (focal lengths must be positive, principal '
+                         'point inside the image)')
 
     return RGBDCapture(
         capture_id=root.name, root=root, timestamps=ts, frames=frames,
