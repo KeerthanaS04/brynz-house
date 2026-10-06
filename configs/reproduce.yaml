@@ -1,0 +1,17 @@
+# scripts/reproduce.py: regenerate the current evidence from the raw capture ZIPs (DEL-04).
+# Each capture: LiDAR run, video run (step 1 + plan, video only), video oracle (evaluation only).
+# Settings match the reports: the two longer videos at 3 frames/s (reports/video_tier).
+audit: true
+captures:
+  single_room:
+    zip: single_room.zip
+    lidar_set: []
+    video_set: []
+  floor_only:
+    zip: single_scan_floor_only.zip
+    lidar_set: []
+    video_set: [video.target_fps=3]
+  with_ceiling:
+    zip: single_scan_with_ceiling.zip
+    lidar_set: []
+    video_set: [video.target_fps=3]

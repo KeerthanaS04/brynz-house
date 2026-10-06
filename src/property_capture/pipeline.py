@@ -1,9 +1,10 @@
-"""Phase 0 RGB-D baseline: one capture in, one run directory out.
+"""LiDAR tier: one RGB-D capture in, one run directory out.
 
-Stages: load -> resolve pose conventions -> gravity -> fuse -> floor plan
--> half-split consistency -> property.json, metrics, gates, render.
-Poses are used as-is (no drift correction); every measurement is
-uncalibrated because the supplied captures have no reference measurements.
+Stages: load -> resolve pose conventions -> gravity -> RGB alignment -> drift correction
+(validated on held-out revisits, applied only if it helps) -> fusion, floor plan, openings
+(plan_outputs) -> drift on/off ablation -> half-split consistency -> property.json, metrics,
+gates, render (plan_outputs). Every measurement is uncalibrated because the supplied captures
+have no reference measurements.
 """
 import csv
 import datetime
