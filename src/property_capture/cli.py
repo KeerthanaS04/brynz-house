@@ -31,7 +31,45 @@ def main(argv=None):
     e.add_argument('--output', help='fresh folder (default <first run>/evaluation_<UTC time>)')
     e.add_argument('--strict', action='store_true', help='exit 1 if any gate fails')
 
+    v = sub.add_parser('video', help='video tier: camera motion and sparse structure from an RGB video alone')
+    v.add_argument('--input', required=True, help='video file, or a capture folder (only its rgb.mp4 is read)')
+    v.add_argument('--config', default=str(REPO_ROOT / 'configs' / 'default.yaml'))
+    v.add_argument('--output', help='fresh folder (default outputs/video_<UTC time>)')
+    v.add_argument('--set', action='append', default=[], metavar='KEY=VALUE')
+
+    vo = sub.add_parser('video-oracle', help='EVALUATION ONLY: compare a video run with the device poses')
+    vo.add_argument('--video-run', required=True)
+    vo.add_argument('--capture', required=True, help='capture folder or ZIP the video came from')
+
     args = ap.parse_args(argv)
+    if args.command == 'video':
+        import json
+
+        import yaml
+
+        from .modalities.video_sfm import run_video
+        from .pipeline import apply_overrides
+        with open(args.config, encoding='utf-8') as f:
+            cfg = apply_overrides(yaml.safe_load(f), args.set)
+        src = Path(args.input)
+        video_path = src / 'rgb.mp4' if src.is_dir() else src
+        out = args.output or str(REPO_ROOT / 'outputs' /
+                                 f"video_{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}")
+        summary = run_video(video_path, out, cfg['video'])
+        print(json.dumps({k: summary[k] for k in ('frame_selection', 'sfm', 'registered_fraction',
+                                                  'fraction_in_any_model', 'scale_status')},
+                         indent=2, default=str))
+        print(f'video run written to {out}')
+        return 0
+    if args.command == 'video-oracle':
+        import json
+
+        from .evaluation.video_oracle import compare
+        result = compare(args.video_run, args.capture, REPO_ROOT / 'data' / 'raw')
+        (Path(args.video_run) / 'oracle_comparison.json').write_text(json.dumps(result, indent=2, default=str),
+                                                                      encoding='utf-8')
+        print(json.dumps(result, indent=2, default=str))
+        return 0
     if args.command == 'audit':
         sys.argv = ['audit_datasets.py', *args.rest]
         runpy.run_path(str(REPO_ROOT / 'scripts' / 'audit_datasets.py'), run_name='__main__')

@@ -11,7 +11,7 @@ below are internal consistency checks, not accuracy.
 | Tier | Hardware | Capture tool | Inputs used | Pipeline status | What we can say about accuracy today |
 |---|---|---|---|---|---|
 | **LiDAR (3D scan)** | iPhone 12 Pro or newer with LiDAR (walk-in: iPhone 15 Pro / Pro Max, 16 Pro / Pro Max) | Stray Scanner (assumptions.md B-20) | depth 256×192 + confidence, RGB video 1920×1440, device poses, per-frame intrinsics, IMU | **Implemented:** `python -m property_capture run` | Internal only (see below) |
-| **Video** | any iPhone 15 or newer | built-in Camera app | RGB video only; no depth, no poses | **Not implemented** (BLOCKED, REQ-01) | None |
+| **Video** | any iPhone 15 or newer | built-in Camera app | RGB video only; no depth, no poses | **Partial:** `python -m property_capture video` recovers camera motion and sparse points, in pieces with unknown and unrelated scales; **no floor plan yet** | Camera motion within pieces: median 0.5–0.8% of distance travelled vs device poses; some pieces wrong (up to 19%); pieces cannot be combined (`reports/video_tier`) |
 | **Photo** | any iPhone 15 or newer | built-in Camera app | 2–8 stills per room, one folder per room; no depth, no poses | **Not implemented** (BLOCKED, REQ-01) | None |
 
 ## LiDAR tier: internal consistency on the supplied captures

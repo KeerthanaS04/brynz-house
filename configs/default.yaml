@@ -37,6 +37,31 @@ rgb:                           # calibration/rgb_alignment.py: depth vs RGB alig
   temporal_min_fraction: 0.5   # paired video frame should align best in at least half the frames
   preview_frames: 4
 
+video:                         # modalities/video_sfm.py: video tier (RGB video only, no depth or poses)
+  # first run (single_room): 3 fps, 1024 px, 4096 features, overlap 10, COLMAP default mapper
+  # -> 18 of 93 frames registered in the largest of 4 models (reports/video_tier)
+  target_fps: 6                # keep the sharpest frame of each 1/6 s window
+  analysis_width: 480          # sharpness measured on a downscaled grey image
+  min_sharpness_ratio: 0.5     # drop kept frames blurrier than half the median sharpness
+  max_image_size: 1600         # longest side for feature extraction (CPU)
+  camera_model: SIMPLE_RADIAL  # one shared camera, focal length estimated
+  max_features: 8192
+  # round 2 (6 fps, 1600 px, 8192 features, overlap 20, looser mapper): 36 of 170 frames,
+  # 7 pieces of 18-36 frames; ATE 3.7 cm RMS (round 1: 1.1 cm)
+  # round 3 (exhaustive matching): 43 of 170 in the largest of 7 pieces; 160 of 170 in some piece.
+  # Breaks fall where the phone turns on the spot (38 deg/s, 175 deg per metre walked vs 50 elsewhere):
+  # no parallax, so no 3D points to attach the next stretch to.
+  matcher: sequential          # sequential | exhaustive (all pairs: joins pieces at revisits; O(n^2))
+  sequential_overlap: 20       # match each frame with the next 20 (plus quadratic overlap)
+  random_seed: 0
+  pipeline:                    # COLMAP IncrementalPipelineOptions (defaults in brackets)
+    structure_less_registration_fallback: false  # [false] place a frame from 2D matches when no 3D points are visible
+  mapper:                      # COLMAP IncrementalMapperOptions (defaults in brackets)
+    init_min_tri_angle: 4.0    # [16] degrees between the first two cameras of a model
+    init_min_num_inliers: 50   # [100]
+    abs_pose_min_num_inliers: 15     # [30] matches needed to add a camera
+    abs_pose_min_inlier_ratio: 0.15  # [0.25]
+
 openings:                      # rooms/openings.py: doors, windows and other openings from camera rays
   enabled: true
   frame_stride: 6

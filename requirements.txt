@@ -4,3 +4,4 @@ pillow>=10.0
 opencv-python>=4.10
 pyyaml>=6.0
 shapely>=2.0
+pycolmap>=4.0
