@@ -88,7 +88,9 @@ def render_floorplan(path, plan, title_lines, px_per_m=120, margin=110):
         colour = {'door': (0, 0, 200), 'window': (200, 120, 0), 'passage': (140, 0, 140)}.get(o['type'], (0, 140, 0))
         cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), colour, 5, cv2.LINE_AA)
         tag = {'door': 'D', 'window': 'W', 'passage': 'P'}.get(o['type'], 'O')
-        _text(img, f"{tag} {o['width_m']:.2f}", to_px(o['centre'])[0] + np.array([0, 14]), 0.42, colour)
+        w = o.get('physical_width_m', o['width_m'])
+        label = f'{tag} {w:.2f}' if w is not None else f"{tag} ~{o['width_m']:.2f}?"
+        _text(img, label, to_px(o['centre'])[0] + np.array([0, 14]), 0.42, colour)
 
     for sw in plan.get('shared_walls') or []:
         for cl in sw['centrelines']:

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import yaml
 
-from property_capture.rooms.openings import WallGrid
+from property_capture.rooms.openings import WallGrid, fuse_physical
 
 with open(Path(__file__).resolve().parents[2] / 'configs' / 'default.yaml', encoding='utf-8') as f:
     OCFG = yaml.safe_load(f)['openings']
@@ -96,6 +96,43 @@ def test_floor_to_ceiling_opening_is_a_passage():
     rng = np.random.default_rng(5)
     ops = [o for o in _grid(_scene_rays(rng, [(1.0, 2.2, 0.0, 2.7)], CAMS)).openings() if o['bounded']]
     assert len(ops) == 1 and ops[0]['type'] == 'passage'
+
+
+def _det(oid, start, end, jambs, kind='door'):
+    s, e = np.array(start, float), np.array(end, float)
+    return {'opening_id': oid, 'start': s.tolist(), 'end': e.tolist(), 'jamb_wall_fraction': jambs, 'type': kind,
+            'width_m': float(np.linalg.norm(e - s)), 'centre': ((s + e) / 2).tolist(), 'sill_m': 0.0, 'head_m': 2.1}
+
+
+def test_both_jambs_from_both_rooms_average():
+    # the same doorway seen from both rooms (opposite edge directions), jambs seen everywhere
+    a = _det('a', [0.0, 0.0], [0.82, 0.0], [1.0, 0.8])
+    b = _det('b', [0.81, 0.1], [-0.01, 0.1], [0.9, 0.7])
+    p = fuse_physical([a, b], OCFG)
+    assert p['width_status'] == 'measured' and abs(p['width_m'] - 0.82) < 0.006
+    assert abs(p['end_spread_m'] - 0.01) < 1e-9
+
+
+def test_end_without_any_jamb_is_not_measurable():
+    # the 37 cm case: both rooms saw the jamb at x = 0, neither saw one at the other end
+    a = _det('a', [0.0, 0.0], [0.69, 0.0], [0.99, 0.01])
+    b = _det('b', [1.06, 0.1], [0.0, 0.1], [0.0, 0.63])
+    p = fuse_physical([a, b], OCFG)
+    assert p['width_m'] is None and 'one end' in p['width_status']
+    assert p['jamb_estimates'] == {'low_end': 2, 'high_end': 0}
+
+
+def test_each_room_contributes_the_jamb_it_saw():
+    a = _det('a', [0.0, 0.0], [0.95, 0.0], [0.9, 0.0])        # saw only the low jamb
+    b = _det('b', [0.80, 0.1], [-0.30, 0.1], [0.8, 0.0])       # saw only the high jamb (at x = 0.80)
+    p = fuse_physical([a, b], OCFG)
+    assert p['width_status'] == 'measured' and abs(p['width_m'] - 0.80) < 1e-9
+
+
+def test_single_detection_needs_both_jambs():
+    assert fuse_physical([_det('a', [0, 0], [0.9, 0], [0.8, 0.8])], OCFG)['width_status'] == 'measured'
+    p = fuse_physical([_det('a', [0, 0], [0.9, 0], [0.0, 0.0], 'window')], OCFG)
+    assert p['width_m'] is None and 'both ends' in p['width_status'] and p['type'] == 'window'
 
 
 def test_camera_outside_the_room_side_is_ignored():

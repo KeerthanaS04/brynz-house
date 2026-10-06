@@ -133,6 +133,47 @@ class WallGrid:
         return out
 
 
+TYPE_PRIORITY = ('door', 'passage', 'window', 'opening')
+
+
+def fuse_physical(members, cfg):
+    """One physical opening from its detections (one per room it was seen from).
+
+    Each end of a detection is a jamb only if wall was seen beside it; otherwise the opening
+    there just ran until the evidence ran out, and its position says nothing. An end's
+    position is the mean of the estimates from detections that saw a jamb there; the width
+    is measurable only if both ends have at least one. The spread of estimates at an end
+    is a consistency check between rooms (no ground truth).
+    """
+    ref = members[0]
+    a = np.asarray(ref['start'], float)
+    u = np.asarray(ref['end'], float) - a
+    u /= np.linalg.norm(u)
+    lo, hi = [], []
+    for m in members:
+        ends = [((np.asarray(m['start'], float) - a) @ u, m['jamb_wall_fraction'][0]),
+                ((np.asarray(m['end'], float) - a) @ u, m['jamb_wall_fraction'][1])]
+        ends.sort(key=lambda e: e[0])
+        if ends[0][1] >= cfg['jamb_min_fraction']:
+            lo.append(ends[0][0])
+        if ends[1][1] >= cfg['jamb_min_fraction']:
+            hi.append(ends[1][0])
+    candidate = float(np.median([m['width_m'] for m in members]))
+    kind = next(t for t in TYPE_PRIORITY if any(m['type'] == t for m in members) or t == 'opening')
+    out = {'members': [m['opening_id'] for m in members], 'type': kind, 'candidate_width_m': candidate,
+           'jamb_estimates': {'low_end': len(lo), 'high_end': len(hi)},
+           'end_spread_m': float(max([np.ptp(lo) if len(lo) > 1 else 0.0, np.ptp(hi) if len(hi) > 1 else 0.0])),
+           'centre': np.mean([m['centre'] for m in members], axis=0).tolist(),
+           'sill_m': float(min(m['sill_m'] for m in members)), 'head_m': float(max(m['head_m'] for m in members))}
+    if lo and hi:
+        out.update({'width_m': float(np.mean(hi) - np.mean(lo)), 'width_status': 'measured'})
+    else:
+        missing = 'both ends' if not lo and not hi else 'one end'
+        out.update({'width_m': None,
+                    'width_status': f'not_measurable: jamb not observed at {missing} (from any room)'})
+    return out
+
+
 def _wall_height(room, cfg):
     cand = (room.get('ceiling') or {}).get('candidate_height_m')
     return cand if cand is not None and 2.0 <= cand <= 6.0 else cfg['default_height_m']
@@ -208,5 +249,13 @@ def detect_openings(cap, T, axes, plan, cfg, dcfg):
     both_sides = [{'openings': g, 'widths_m': [by_id[i]['width_m'] for i in g],
                    'difference_m': float(max(by_id[i]['width_m'] for i in g) - min(by_id[i]['width_m'] for i in g))}
                   for g in groups if len(g) > 1]
+    physical = []
+    for k, g in enumerate(groups):
+        p = fuse_physical([by_id[i] for i in g], cfg)
+        p['physical_id'] = f'opening-{k:02d}'
+        for i in g:
+            by_id[i]['physical_id'] = p['physical_id']
+        physical.append(p)
     return found, unbounded, {'frames_used_per_room': used, 'walls_searched': sum(len(e) for e in grids.values()),
-                              'physical_openings': len(groups), 'seen_from_both_sides': both_sides}
+                              'physical_openings': len(groups), 'seen_from_both_sides': both_sides,
+                              'physical': physical}
