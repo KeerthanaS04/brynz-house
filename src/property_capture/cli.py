@@ -37,9 +37,17 @@ def main(argv=None):
     v.add_argument('--output', help='fresh folder (default outputs/video_<UTC time>)')
     v.add_argument('--set', action='append', default=[], metavar='KEY=VALUE')
 
+    vp = sub.add_parser('video-plan', help='video tier step 2: floor plan from a video run and network depth')
+    vp.add_argument('--video-run', required=True, help='folder written by the video command')
+    vp.add_argument('--config', default=str(REPO_ROOT / 'configs' / 'default.yaml'))
+    vp.add_argument('--gates', default=str(REPO_ROOT / 'configs' / 'evaluation' / 'gates.yaml'))
+    vp.add_argument('--output', help='fresh folder (default outputs/video_plan_<UTC time>)')
+    vp.add_argument('--set', action='append', default=[], metavar='KEY=VALUE')
+
     vo = sub.add_parser('video-oracle', help='EVALUATION ONLY: compare a video run with the device poses')
-    vo.add_argument('--video-run', required=True)
+    vo.add_argument('--video-run', required=True, help='folder written by the video or video-plan command')
     vo.add_argument('--capture', required=True, help='capture folder or ZIP the video came from')
+    vo.add_argument('--lidar-run', help='video-plan runs only: LiDAR-tier run of the same capture to compare plans')
 
     args = ap.parse_args(argv)
     if args.command == 'video':
@@ -61,11 +69,30 @@ def main(argv=None):
                          indent=2, default=str))
         print(f'video run written to {out}')
         return 0
+    if args.command == 'video-plan':
+        import json
+
+        import yaml
+
+        from .plan_outputs import apply_overrides
+        from .video_pipeline import run_video_plan
+        with open(args.config, encoding='utf-8') as f:
+            cfg = apply_overrides(yaml.safe_load(f), args.set)
+        out = args.output or str(REPO_ROOT / 'outputs' /
+                                 f"video_plan_{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}")
+        vm = run_video_plan(args.video_run, out, cfg, args.gates)
+        print(json.dumps({k: vm[k] for k in ('runs', 'links', 'trajectory')} | {'runs': {
+            k: v for k, v in vm['runs'].items() if k != 'details'}}, indent=2, default=str))
+        print(f'video plan written to {out}')
+        return 0
     if args.command == 'video-oracle':
         import json
 
-        from .evaluation.video_oracle import compare
-        result = compare(args.video_run, args.capture, REPO_ROOT / 'data' / 'raw')
+        from .evaluation.video_oracle import compare, compare_plan
+        if (Path(args.video_run) / 'intermediates' / 'video_trajectory.json').exists():
+            result = compare_plan(args.video_run, args.capture, REPO_ROOT / 'data' / 'raw', args.lidar_run)
+        else:
+            result = compare(args.video_run, args.capture, REPO_ROOT / 'data' / 'raw')
         (Path(args.video_run) / 'oracle_comparison.json').write_text(json.dumps(result, indent=2, default=str),
                                                                       encoding='utf-8')
         print(json.dumps(result, indent=2, default=str))
