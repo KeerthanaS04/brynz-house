@@ -78,6 +78,15 @@ def summarize(run_dir):
             f"{_get(m, 'openings.physical_openings')} / {len(_get(m, 'openings.unbounded_gaps_excluded') or [])} / "
             f"{sum(o['matches_connection'] for o in _get(m, 'openings.found') or [])}"
             if _get(m, 'openings.enabled') else None),
+        'physical openings: width m (n = jambs not seen) [end spread cm]': ', '.join(
+            (f"{p['type'][0].upper()} {p['width_m']:.3f}" if p['width_m'] is not None
+             else f"{p['type'][0].upper()} n~{p['candidate_width_m']:.2f}")
+            + (f" [{100 * p['end_spread_m']:.1f}]" if len(p['members']) > 1 else '')
+            for p in _get(m, 'openings.physical') or []) or None,
+        'physical openings: width measured / not measurable': (
+            f"{sum(p['width_m'] is not None for p in _get(m, 'openings.physical'))} / "
+            f"{sum(p['width_m'] is None for p in _get(m, 'openings.physical'))}"
+            if _get(m, 'openings.physical') else None),
         'openings seen from both sides: width difference (cm)': ', '.join(
             f"{100 * b['difference_m']:.0f}" for b in _get(m, 'openings.seen_from_both_sides') or []) or None,
         'room overlap before / after clipping (m2)':
@@ -148,6 +157,7 @@ def main():
         lines.append(f'| {key} | ' + ' | '.join(_fmt(r[key]) for r in rows) + ' |')
     text = '\n'.join(lines) + '\n'
     if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(text, encoding='utf-8')
     print(text)
 

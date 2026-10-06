@@ -282,6 +282,9 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
         t0 = time.time()
         openings, open_gaps, stats_ = detect_openings(cap, T, axes, plan, cfg['openings'], cfg['depth'])
         open_stats.update(stats_)
+        widths = {p['physical_id']: p['width_m'] for p in stats_['physical']}
+        for o in openings:
+            o['physical_width_m'] = widths[o['physical_id']]
         plan['openings'] = openings
         log.info('openings: %d found (%d physical; %s), %d unbounded gaps excluded', len(openings),
                  stats_['physical_openings'], ', '.join(f"{o['type']} {o['width_m']:.2f} m" for o in openings),
@@ -330,23 +333,33 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
             'calibration_status': 'no reference measurements (assumptions.md B-21)'}
 
     def room_openings(rid):
-        out_ = []
-        for o in openings:
-            if o['room_id'] != rid:
-                continue
-            mid = f"M-{o['opening_id']}-width"
+        """This room's detections; widths are measured once per physical opening (below)."""
+        return [{'opening_id': o['opening_id'], 'physical_opening_id': o['physical_id'], 'type': o['type'],
+                 'wall_id': f"{rid}-wall-{o['edge']:02d}", 'detected_width_m': o['width_m'],
+                 'jamb_wall_fraction': o['jamb_wall_fraction'], 'height_m': o['height_m'], 'sill_m': o['sill_m'],
+                 'head_m': o['head_m'], 'start': o['start'], 'end': o['end'], 'same_as': o['same_as'],
+                 'matches_room_connection': o['matches_connection'], 'accepted_by': o['accepted_by'],
+                 'evidence': 'observed: camera rays passed through the wall plane here'}
+                for o in openings if o['room_id'] == rid]
+
+    physical_out = []
+    for p in open_stats.get('physical', []):
+        entry = {k: p[k] for k in ('physical_id', 'type', 'members', 'width_status', 'candidate_width_m',
+                                   'end_spread_m', 'jamb_estimates', 'centre', 'sill_m', 'head_m')}
+        if p['width_m'] is not None:
+            mid = f"M-{p['physical_id']}-width"
             measurements.append({
-                'id': mid, 'quantity': 'opening_width', 'value': o['width_m'], **base,
-                'method': 'extent of wall cells seen through by camera rays, edges refined by through fraction',
-                'evidence_ids': [o['opening_id'], f"{rid}-wall-{o['edge']:02d}"],
-                'quality_flags': [] if o['matches_connection'] or o['type'] == 'window' else ['not_confirmed_by_segmentation'],
-                'width_resolution_m': o['width_resolution_m'], 'through_rays': o['through_rays']})
-            out_.append({'opening_id': o['opening_id'], 'type': o['type'], 'wall_id': f"{rid}-wall-{o['edge']:02d}",
-                         'width_measurement_id': mid, 'height_m': o['height_m'], 'sill_m': o['sill_m'],
-                         'head_m': o['head_m'], 'start': o['start'], 'end': o['end'], 'same_as': o['same_as'],
-                         'matches_room_connection': o['matches_connection'], 'accepted_by': o['accepted_by'],
-                         'evidence': 'observed: camera rays passed through the wall plane here'})
-        return out_
+                'id': mid, 'quantity': 'opening_width', 'value': p['width_m'], **base,
+                'method': 'distance between jambs seen by camera rays (mean over rooms that saw each jamb), '
+                          'edges refined within the 2 cm cell by through fraction',
+                'evidence_ids': [p['physical_id'], *p['members']],
+                'quality_flags': [] if len(p['members']) > 1 or p['end_spread_m'] == 0 else ['seen_from_one_room'],
+                'end_spread_m': p['end_spread_m']})
+            entry['width_measurement_id'] = mid
+        else:
+            unobservable.append({'quantity': 'opening_width', 'opening_id': p['physical_id'],
+                                 'reason': p['width_status']})
+        physical_out.append(entry)
 
     for r in plan['rooms']:
         rid = r['room_id']
@@ -449,7 +462,8 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                              'origin_world': plan['basis']['origin'], 'x_axis_world': plan['basis']['e1'],
                              'y_axis_world': plan['basis']['e2'], 'up_world': plan['basis']['up']},
         'rooms': rooms_out,
-        'connections': connections_out, 'shared_walls': shared_out, 'measurements': measurements,
+        'connections': connections_out, 'shared_walls': shared_out, 'openings': physical_out,
+        'measurements': measurements,
         'warnings': warnings, 'unobservable': unobservable,
         'evaluation': [{'status': 'not_evaluable', 'reason': 'no reference measurements'}],
     }
@@ -492,7 +506,10 @@ def run(input_path, config_path, output_dir, gates_path, overrides=None):
                   for r in plan['rooms']],
         'connections': plan['connections'],
         'openings': {
-            **{k: v for k, v in open_stats.items()},
+            **{k: v for k, v in open_stats.items() if k != 'physical'},
+            'physical': [{k: p[k] for k in ('physical_id', 'type', 'members', 'width_m', 'width_status',
+                                            'candidate_width_m', 'end_spread_m', 'jamb_estimates')}
+                         for p in open_stats.get('physical', [])],
             'found': [{k: o[k] for k in ('opening_id', 'type', 'width_m', 'height_m', 'sill_m', 'head_m', 'same_as',
                                          'matches_connection', 'accepted_by', 'through_rays', 'jamb_wall_fraction')}
                       for o in openings],
