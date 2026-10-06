@@ -95,6 +95,7 @@ Report folders under `reports/` were made at earlier commits; each run's `run_in
 
 | Document | For |
 |---|---|
+| `docs/technical_report.md` | technical report (draft): architecture, tiers, calibration, drift, error budget, fix loop, failure modes |
 | `docs/capture_protocol.md` | one-page capture instructions for a non-engineer (PDF Route 2) |
 | `docs/device_matrix.md` | which tier runs on which iPhone, and what accuracy each honestly delivers |
 | `docs/benchmark_protocol.md` | benchmark set and laser reference measurements (template in `docs/templates/`) |
